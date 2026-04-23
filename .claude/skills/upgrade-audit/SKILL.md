@@ -1,6 +1,5 @@
 ---
 name: upgrade-audit
-version: "2026-04-24"
 description: Compare the current project's Claude Code governance against the ai-projectforge reference kit and produce a prioritized gap report. Optionally focus on a specific area (agents, commands, skills, templates). Detects project items that could be contributed back to ai-projectforge. Use when you want to know what agents, commands, skills, or issue templates the current project is missing or has outdated compared to ai-projectforge.
 ---
 
@@ -47,28 +46,43 @@ The P0 ticket-gate quality check (Step 5) always runs regardless of focus.
 
 Run this before any other step. Complete (or gracefully skip) before proceeding.
 
+Versioning is content-based: the installed file's git blob SHA is compared against the
+blob SHA that GitHub reports for the same file. No manual version field to maintain —
+any commit that changes the skill automatically produces a new blob SHA.
+
 ```bash
-# 1. Read installed version
-grep "^version:" ~/.claude/skills/upgrade-audit/SKILL.md | head -1
+# 1. Compute local blob SHA (works outside git repos)
+LOCAL_SHA=$(git hash-object ~/.claude/skills/upgrade-audit/SKILL.md 2>/dev/null)
+
+# 2. Fetch remote blob SHA via GitHub API (requires gh auth)
+REMOTE_SHA=$(gh api repos/agigante80/ai-projectforge/contents/.claude/skills/upgrade-audit/SKILL.md \
+  --jq '.sha' 2>/dev/null)
 ```
 
+Store `LOCAL_SHA` — it is used in the report header in Step 6.
+
+**Evaluate:**
+
+| Condition | Action |
+|---|---|
+| Either SHA is empty (not installed, no gh auth, network error) | Skip silently; proceed |
+| `LOCAL_SHA == REMOTE_SHA` | Already up to date; skip silently |
+| `LOCAL_SHA != REMOTE_SHA` | Auto-update (see below) |
+
+**Auto-update (only when SHAs differ):**
+
 ```bash
-# 2. Fetch GitHub version (requires gh auth)
-gh api repos/agigante80/ai-projectforge/contents/.claude/skills/upgrade-audit/SKILL.md \
-  --jq '.content' | base64 -d | grep "^version:" | head -1
-```
+# Fetch human-readable commit date for the output message
+REMOTE_DATE=$(gh api "repos/agigante80/ai-projectforge/commits?path=.claude/skills/upgrade-audit/SKILL.md&per_page=1" \
+  --jq '.[0].commit.committer.date[:10]' 2>/dev/null)
 
-Compare the two version strings (ISO date - lexicographic comparison is correct):
-
-- **GitHub version > installed version:** auto-update, then print:
-  `upgrade-audit updated: <old> -> <new>. Continuing with new version.`
-- **Equal or check fails (no gh auth, network error):** skip silently, proceed with installed version.
-
-Auto-update command (run only when newer found):
-```bash
+# Overwrite installed file
 gh api repos/agigante80/ai-projectforge/contents/.claude/skills/upgrade-audit/SKILL.md \
   --jq '.content' | base64 -d > ~/.claude/skills/upgrade-audit/SKILL.md
 ```
+
+Then print:
+`upgrade-audit updated to ${REMOTE_DATE:-latest} (${REMOTE_SHA:0:7}). Continuing with new version.`
 
 ### Step 1: Verify ai-projectforge is available
 
@@ -154,7 +168,7 @@ sequentially across all priorities — this numbering is used in Step 6.5 for se
 ## upgrade-audit report
 Reference: ~/dev-github-personal/ai-projectforge (commit: <hash>)
 Date: <today>
-Skill version: <installed version>
+Skill: upgrade-audit @ <LOCAL_SHA[:7]>
 [Focus: <area> only  <- include this line only when a focus keyword was detected]
 
 ### P0 - Critical governance gaps
@@ -341,6 +355,6 @@ Print the issue URL after each creation.
 - **Skip upgrade-audit itself** when comparing skills (globally installed, not a project gap).
 - **Ignore project-specific agents** not in ai-projectforge (safety-logic-reviewer, prisma-schema-guardian, etc.) - intentionally project-specific.
 - **P0 is a hard gate.** If ticket-gate is missing or outdated, say so prominently first.
-- **Step 0 is the only exception** — it may overwrite `~/.claude/skills/upgrade-audit/SKILL.md` without user selection.
+- **Step 0 is the only exception** — it may overwrite `~/.claude/skills/upgrade-audit/SKILL.md` without user selection. Versioning is by git blob SHA (content hash), not a manual version field.
 - **Step 7 only runs in full-audit mode** (no focus keyword). Skip it when focus is set.
 - **Never auto-create contribution issues.** Always wait for explicit user confirmation.
