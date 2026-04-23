@@ -1,12 +1,12 @@
 # Upgrading an Existing Project
 
-claude-scaffold is a living reference. As new agents, patterns, and governance improvements
+ai-projectforge is a living reference. As new agents, patterns, and governance improvements
 are added, you can pull them into existing projects using the `upgrade-audit` skill.
 
 ## How it works
 
 The `upgrade-audit` skill compares the current project's `.claude/` directory and GitHub
-issue templates against `~/dev-github-personal/claude-scaffold/` and produces a
+issue templates against `~/dev-github-personal/ai-projectforge/` and produces a
 prioritized gap report.
 
 ## Running upgrade-audit
@@ -18,7 +18,7 @@ Run upgrade-audit
 ```
 
 Or invoke the skill by name. Claude will:
-1. List recent changes to claude-scaffold (via git log)
+1. List recent changes to ai-projectforge (via git log)
 2. Compare your project's agents, commands, skills, and templates
 3. Produce a report with exact copy commands for each gap
 
@@ -26,23 +26,23 @@ Or invoke the skill by name. Claude will:
 
 ```
 ## upgrade-audit report
-Reference: ~/dev-github-personal/claude-scaffold (commit: abc1234)
+Reference: ~/dev-github-personal/ai-projectforge (commit: abc1234)
 Date: 2026-04-23
 
 ### P0 - Critical governance gaps
-- ticket-gate agent missing -> copy from claude-scaffold and customize {{GITHUB_REPO}}
+- ticket-gate agent missing -> copy from ai-projectforge and customize {{GITHUB_REPO}}
 
 ### P1 - Missing core agents
 - security-auditor: not present
-  cp ~/dev-github-personal/claude-scaffold/.claude/agents/security-auditor.md .claude/agents/
+  cp ~/dev-github-personal/ai-projectforge/.claude/agents/security-auditor.md .claude/agents/
 
 ### P2 - Outdated issue templates
 - feature.yml: v3 detected, current is v4
-  cp ~/dev-github-personal/claude-scaffold/.github/ISSUE_TEMPLATE/feature.yml .github/ISSUE_TEMPLATE/
+  cp ~/dev-github-personal/ai-projectforge/.github/ISSUE_TEMPLATE/feature.yml .github/ISSUE_TEMPLATE/
 
 ### P3 - Optional enhancements
 - tdd-orchestrator: not present
-  cp ~/dev-github-personal/claude-scaffold/.claude/agents/tdd-orchestrator.md .claude/agents/
+  cp ~/dev-github-personal/ai-projectforge/.claude/agents/tdd-orchestrator.md .claude/agents/
 
 ### Already up to date
 - code-reviewer, architect-review: present
@@ -55,13 +55,13 @@ The report includes a copy command for each gap. Apply selectively:
 
 ```bash
 # Copy an agent
-cp ~/dev-github-personal/claude-scaffold/.claude/agents/security-auditor.md .claude/agents/
+cp ~/dev-github-personal/ai-projectforge/.claude/agents/security-auditor.md .claude/agents/
 
 # Copy a skill directory
-cp -r ~/dev-github-personal/claude-scaffold/.claude/skills/owasp-api-security .claude/skills/
+cp -r ~/dev-github-personal/ai-projectforge/.claude/skills/owasp-api-security .claude/skills/
 
 # Copy issue templates
-cp ~/dev-github-personal/claude-scaffold/.github/ISSUE_TEMPLATE/feature.yml .github/ISSUE_TEMPLATE/
+cp ~/dev-github-personal/ai-projectforge/.github/ISSUE_TEMPLATE/feature.yml .github/ISSUE_TEMPLATE/
 ```
 
 After copying `ticket-gate.md`, replace the placeholder with your repo:
@@ -69,10 +69,10 @@ After copying `ticket-gate.md`, replace the placeholder with your repo:
 sed -i 's/{{GITHUB_REPO}}/owner\/repo/g' .claude/agents/ticket-gate.md
 ```
 
-## Keeping claude-scaffold up to date
+## Keeping ai-projectforge up to date
 
 ```bash
-git -C ~/dev-github-personal/claude-scaffold pull
+git -C ~/dev-github-personal/ai-projectforge pull
 ```
 
 Run upgrade-audit after pulling to see what's new.

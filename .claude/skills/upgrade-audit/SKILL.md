@@ -1,20 +1,20 @@
 ---
 name: upgrade-audit
 version: "2026-04-24"
-description: Compare the current project's Claude Code governance against the claude-scaffold reference kit and produce a prioritized gap report. Optionally focus on a specific area (agents, commands, skills, templates). Detects project items that could be contributed back to claude-scaffold. Use when you want to know what agents, commands, skills, or issue templates the current project is missing or has outdated compared to claude-scaffold.
+description: Compare the current project's Claude Code governance against the ai-projectforge reference kit and produce a prioritized gap report. Optionally focus on a specific area (agents, commands, skills, templates). Detects project items that could be contributed back to ai-projectforge. Use when you want to know what agents, commands, skills, or issue templates the current project is missing or has outdated compared to ai-projectforge.
 ---
 
 # upgrade-audit
 
 Compares the current project's Claude Code governance structure against the
-`~/dev-github-personal/claude-scaffold/` reference kit and produces a prioritized gap report.
+`~/dev-github-personal/ai-projectforge/` reference kit and produces a prioritized gap report.
 Optionally run on a specific area only, and detect project items worth contributing back.
 
 ## When to Use This Skill
 
 - "What governance pieces is this project missing?"
-- "Has claude-scaffold been updated since we last synced?"
-- "What should I bring in from claude-scaffold?"
+- "Has ai-projectforge been updated since we last synced?"
+- "What should I bring in from ai-projectforge?"
 - "Run an upgrade audit"
 - "upgrade-audit agents" / "upgrade-audit templates" (focus on one area)
 - Any time you want to improve a project's Claude Code structure
@@ -54,7 +54,7 @@ grep "^version:" ~/.claude/skills/upgrade-audit/SKILL.md | head -1
 
 ```bash
 # 2. Fetch GitHub version (requires gh auth)
-gh api repos/agigante80/claude-scaffold/contents/.claude/skills/upgrade-audit/SKILL.md \
+gh api repos/agigante80/ai-projectforge/contents/.claude/skills/upgrade-audit/SKILL.md \
   --jq '.content' | base64 -d | grep "^version:" | head -1
 ```
 
@@ -66,50 +66,50 @@ Compare the two version strings (ISO date - lexicographic comparison is correct)
 
 Auto-update command (run only when newer found):
 ```bash
-gh api repos/agigante80/claude-scaffold/contents/.claude/skills/upgrade-audit/SKILL.md \
+gh api repos/agigante80/ai-projectforge/contents/.claude/skills/upgrade-audit/SKILL.md \
   --jq '.content' | base64 -d > ~/.claude/skills/upgrade-audit/SKILL.md
 ```
 
-### Step 1: Verify claude-scaffold is available
+### Step 1: Verify ai-projectforge is available
 
 ```bash
-ls ~/dev-github-personal/claude-scaffold/.claude/agents/ 2>/dev/null | head -5
+ls ~/dev-github-personal/ai-projectforge/.claude/agents/ 2>/dev/null | head -5
 ```
 
 If the directory does not exist, stop and print:
 ```
-claude-scaffold not found at ~/dev-github-personal/claude-scaffold/
-Clone it first: git clone https://github.com/agigante80/claude-scaffold ~/dev-github-personal/claude-scaffold
+ai-projectforge not found at ~/dev-github-personal/ai-projectforge/
+Clone it first: git clone https://github.com/agigante80/ai-projectforge ~/dev-github-personal/ai-projectforge
 ```
 
-### Step 2: Show recent claude-scaffold changes
+### Step 2: Show recent ai-projectforge changes
 
 ```bash
-git -C ~/dev-github-personal/claude-scaffold log --oneline -5
+git -C ~/dev-github-personal/ai-projectforge log --oneline -5
 ```
 
 Print the output so the user knows what version of the reference they're comparing against.
 
-### Step 3: Inventory claude-scaffold
+### Step 3: Inventory ai-projectforge
 
 Collect only what the current focus requires:
 
 ```bash
 # Always collect (for ticket-gate check):
-ls ~/dev-github-personal/claude-scaffold/.claude/agents/
+ls ~/dev-github-personal/ai-projectforge/.claude/agents/
 
 # Collect if focus = all or agents:
-ls ~/dev-github-personal/claude-scaffold/.claude/agents/
+ls ~/dev-github-personal/ai-projectforge/.claude/agents/
 
 # Collect if focus = all or commands:
-ls ~/dev-github-personal/claude-scaffold/.claude/commands/
+ls ~/dev-github-personal/ai-projectforge/.claude/commands/
 
 # Collect if focus = all or skills:
-ls ~/dev-github-personal/claude-scaffold/.claude/skills/
+ls ~/dev-github-personal/ai-projectforge/.claude/skills/
 
 # Collect if focus = all or templates:
-ls ~/dev-github-personal/claude-scaffold/.github/ISSUE_TEMPLATE/
-grep "template-version:" ~/dev-github-personal/claude-scaffold/.github/ISSUE_TEMPLATE/feature.yml | head -1
+ls ~/dev-github-personal/ai-projectforge/.github/ISSUE_TEMPLATE/
+grep "template-version:" ~/dev-github-personal/ai-projectforge/.github/ISSUE_TEMPLATE/feature.yml | head -1
 ```
 
 ### Step 4: Inventory the current project
@@ -151,7 +151,7 @@ Produce only the sections relevant to the current focus:
 
 ```
 ## upgrade-audit report
-Reference: ~/dev-github-personal/claude-scaffold (commit: <hash>)
+Reference: ~/dev-github-personal/ai-projectforge (commit: <hash>)
 Date: <today>
 Skill version: <installed version>
 [Focus: <area> only  <- include this line only when a focus keyword was detected]
@@ -161,39 +161,39 @@ Skill version: <installed version>
 
 ### P1 - Missing core agents
 [Include when focus = all or agents]
-[Agents in claude-scaffold/.claude/agents/ that are not in current .claude/agents/]
+[Agents in ai-projectforge/.claude/agents/ that are not in current .claude/agents/]
 
 ### P2 - Outdated issue templates
 [Include when focus = all or templates]
-[Templates where current project version < claude-scaffold version]
+[Templates where current project version < ai-projectforge version]
 
 ### P3 - Optional enhancements
 [Include when focus = all or commands or skills]
-[Commands and skills in claude-scaffold that are not in the current project - filtered by focus]
+[Commands and skills in ai-projectforge that are not in the current project - filtered by focus]
 
 ### Already up to date
-[Items in the focused area that match claude-scaffold]
+[Items in the focused area that match ai-projectforge]
 
 ---
 ### How to apply a gap
 
 To copy an agent:
-  cp ~/dev-github-personal/claude-scaffold/.claude/agents/<name>.md .claude/agents/<name>.md
+  cp ~/dev-github-personal/ai-projectforge/.claude/agents/<name>.md .claude/agents/<name>.md
 
 To copy a skill directory:
-  cp -r ~/dev-github-personal/claude-scaffold/.claude/skills/<name> .claude/skills/<name>
+  cp -r ~/dev-github-personal/ai-projectforge/.claude/skills/<name> .claude/skills/<name>
 
 To copy a command:
-  cp ~/dev-github-personal/claude-scaffold/.claude/commands/<name>.md .claude/commands/<name>.md
+  cp ~/dev-github-personal/ai-projectforge/.claude/commands/<name>.md .claude/commands/<name>.md
 
 To copy issue templates:
-  cp ~/dev-github-personal/claude-scaffold/.github/ISSUE_TEMPLATE/*.yml .github/ISSUE_TEMPLATE/
+  cp ~/dev-github-personal/ai-projectforge/.github/ISSUE_TEMPLATE/*.yml .github/ISSUE_TEMPLATE/
 
 After copying ticket-gate.md, replace {{GITHUB_REPO}} with your repo (owner/name):
   sed -i 's/{{GITHUB_REPO}}/owner\/repo/g' .claude/agents/ticket-gate.md
 ```
 
-### Step 7: Potential contributions to claude-scaffold
+### Step 7: Potential contributions to ai-projectforge
 
 Run this step after Step 6. Skip if focus is set (only run in full-audit mode).
 
@@ -204,15 +204,15 @@ Compare project `.claude/` contents against the scaffold inventory from Step 3:
 ```bash
 # Agents in project but not in scaffold:
 comm -23 <(ls .claude/agents/ 2>/dev/null | sort) \
-         <(ls ~/dev-github-personal/claude-scaffold/.claude/agents/ | sort)
+         <(ls ~/dev-github-personal/ai-projectforge/.claude/agents/ | sort)
 
 # Commands in project but not in scaffold:
 comm -23 <(ls .claude/commands/ 2>/dev/null | sort) \
-         <(ls ~/dev-github-personal/claude-scaffold/.claude/commands/ | sort)
+         <(ls ~/dev-github-personal/ai-projectforge/.claude/commands/ | sort)
 
 # Skills in project but not in scaffold (upgrade-audit excluded - it's global):
 comm -23 <(ls .claude/skills/ 2>/dev/null | grep -v "^upgrade-audit$" | sort) \
-         <(ls ~/dev-github-personal/claude-scaffold/.claude/skills/ | grep -v "^upgrade-audit$" | sort)
+         <(ls ~/dev-github-personal/ai-projectforge/.claude/skills/ | grep -v "^upgrade-audit$" | sort)
 ```
 
 **7b. Apply generalisability filter**
@@ -233,9 +233,9 @@ and skip if it:
 For each remaining candidate, read its description line and write:
 
 ```
-### Potential contributions to claude-scaffold
+### Potential contributions to ai-projectforge
 
-The following items in this project are not in claude-scaffold and may be generalisable:
+The following items in this project are not in ai-projectforge and may be generalisable:
 
   1. <name> (<type: agent/command/skill>) - <one-sentence description from file>
   2. ...
@@ -245,7 +245,7 @@ Reply with numbers to open contribution issues (e.g. "1, 2"), or "none" to skip.
 
 If no candidates remain after filtering, print:
 ```
-### Potential contributions to claude-scaffold
+### Potential contributions to ai-projectforge
 No generalisable candidates found (all project-only items appear domain-specific).
 ```
 and stop.
@@ -260,7 +260,7 @@ For each accepted number, read the full file content and run:
 
 ```bash
 gh issue create \
-  --repo agigante80/claude-scaffold \
+  --repo agigante80/ai-projectforge \
   --title "Contribution: <name> (<type>)" \
   --label "contribution" \
   --body "$(cat <<'EOF'
@@ -281,7 +281,7 @@ gh issue create \
 
 ### Checklist
 - [ ] Generalise any hardcoded project references
-- [ ] Add to claude-scaffold README table
+- [ ] Add to ai-projectforge README table
 - [ ] Write or update docs/guides/ if needed
 - [ ] Verify no sensitive data in content
 EOF
@@ -296,7 +296,7 @@ Print the issue URL after each creation.
 
 - **Report only - never auto-apply gaps.** Always list what should change, never change project files.
 - **Skip upgrade-audit itself** when comparing skills (globally installed, not a project gap).
-- **Ignore project-specific agents** not in claude-scaffold (safety-logic-reviewer, prisma-schema-guardian, etc.) - intentionally project-specific.
+- **Ignore project-specific agents** not in ai-projectforge (safety-logic-reviewer, prisma-schema-guardian, etc.) - intentionally project-specific.
 - **P0 is a hard gate.** If ticket-gate is missing or outdated, say so prominently first.
 - **For each gap, provide the exact copy command** so the user can act in one step.
 - **Step 0 is the only exception to "report only"** - it may overwrite `~/.claude/skills/upgrade-audit/SKILL.md`.

@@ -17,7 +17,7 @@ Claude Code includes built-in agent types you can invoke without adding a file h
 
 For the full list, see the Claude Code documentation.
 
-## Agents in claude-scaffold
+## Agents in ai-projectforge
 
 | Agent | Purpose | Invoke when |
 |---|---|---|
