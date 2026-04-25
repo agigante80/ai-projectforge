@@ -12,7 +12,8 @@ The kit is organized into four layers, all living under `plugins/<group>/`:
 
 | Plugin group | Contents |
 |---|---|
-| `forge-kit-governance` | ticket-gate agent, gate-ticket command, forge-adapt skill |
+| `forge-kit-adapt` | forge-adapt skill (the entry point — install this first) |
+| `forge-kit-governance` | ticket-gate agent, gate-ticket command |
 | `forge-kit-review` | code-reviewer, architect-review, backend-architect agents; full-review, pr-enhance commands |
 | `forge-kit-security` | security-auditor, backend-security-coder, api-security-tester agents; owasp-api-security skill |
 | `forge-kit-testing` | tdd-orchestrator, test-automator, performance-engineer agents |
@@ -50,7 +51,7 @@ Note: `dep-auditor` and `health-check` are agent types, not slash commands. Trig
 - Commands → user-facing entry points; delegate to agents
 
 **Installation paths:**
-- Plugin marketplace: `/plugin marketplace add agigante80/forge-kit` then `/plugin install <group>@forge-kit`
+- Plugin marketplace: `/plugin marketplace add agigante80/forge-kit` then `/plugin install forge-kit-adapt@forge-kit` — forge-adapt installs everything else
 - Manual: clone `~/forge-kit`, then run `forge-adapt` from the target project — it reads the codebase, recommends components, and writes adapted versions into `.claude/`
 - `.claude/` in a project repo = project-scoped; `~/.claude/` = global across all projects
 - `{{GITHUB_REPO}}` placeholder in agents must be replaced at install time — `forge-adapt` handles this automatically; manual installs need `sed -i 's/{{GITHUB_REPO}}/owner\/repo/g'`
