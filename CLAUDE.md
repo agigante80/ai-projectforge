@@ -77,6 +77,3 @@ git push
 
 Do this at the end of every task without waiting to be asked.
 
-## CLAUDE.md.template
-
-`CLAUDE.md.template` is the starting-point CLAUDE.md for teams adopting forge-kit. It contains `{{TODO}}` placeholders the project team fills in. When editing this file, preserve the placeholder format so `forge-adapt` can replace repo-level values and leave the project-specific ones for humans.
