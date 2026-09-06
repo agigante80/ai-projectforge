@@ -8,14 +8,22 @@ Every issue template in `.github/ISSUE_TEMPLATE/` contains a hidden version mark
 - type: markdown
   attributes:
     value: |
-      <!-- template-version: 5 -->
+      <!-- template-version: 6 -->
 ```
 
 When a user files an issue, this marker appears in the issue body. The `ticket-gate` agent
 reads this marker and compares it to the current template version. If they differ, it
 auto-synthesises the missing content (see Step 0c Auto-synthesis below).
 
-## Current version: 5
+## Current version: 6
+
+v6 renamed the privacy section from "GDPR compliance" to "Personal data handling" and replaced its
+article-numbered prompts with seven regime-agnostic facts (issue #101). forge-kit names no
+jurisdiction in any default: for most projects a named regime is the WRONG one, and a gate citing
+the wrong statute is worse than one citing none, because it looks authoritative. Projects under a
+specific regime install the opt-in `privacy-regime` skill, which names their own. The field `id`
+changed from `gdpr` to `personal_data`; the gate's Step 0c synthesis table never referenced it, so
+only the templates and `dep-auditor`'s stamped heading moved.
 
 v5 added the ticket-standard improvements approved 2026-07-16 (see
 `docs/superpowers/specs/2026-07-16-ticket-standard-improvements-design.md`): a required
