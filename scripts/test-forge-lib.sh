@@ -270,6 +270,98 @@ case $? in
   *) bad "dry-run case (rc=$?)";;
 esac
 
+# --- #78.1: the config is resolved ONCE per process, not once per call -------------------------
+# Every page used to re-run _forge_load_conf about four times (forge_host, forge_api_base,
+# _forge_token), each a `git rev-parse` plus a fork per config line.
+# The OBSERVABLE consequence of memoizing is that a mid-process change to the file is not picked
+# up for the same root. Asserting that is the only way to distinguish a memo from no memo; an
+# earlier version of this test checked that the guard variable was merely SET, which is true
+# whether or not the memo is honoured, and a mutant deleting the guard survived it.
+(
+  . "$LIB"
+  mkdir -p "$T/memo"
+  _forge_root() { printf '%s' "$T/memo"; }
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=a/one\n' > "$T/memo/.forge.conf"
+  unset FORGE_REPO FORGE_HOST _FORGE_CONF_ROOT
+  _forge_load_conf; first="${FORGE_REPO:-}"
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=b/two\n' > "$T/memo/.forge.conf"
+  unset FORGE_REPO
+  _forge_load_conf; second="${FORGE_REPO:-}"
+  [ "$first" = a/one ] && [ -z "$second" ]
+)
+[ $? -eq 0 ] && ok "the config file is parsed ONCE per root, so a mid-process edit is not re-read (#78.1)" \
+  || bad "config load is memoized (#78.1)"
+
+# The memo is keyed on the ROOT, not a bare boolean, so a caller that moves between repos is
+# still correct. Two roots must both be loadable in one process.
+(
+  . "$LIB"
+  mkdir -p "$T/r1" "$T/r2"
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=a/one\n' > "$T/r1/.forge.conf"
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=b/two\n' > "$T/r2/.forge.conf"
+  _forge_root() { printf '%s' "$CUR"; }
+  CUR="$T/r1"; unset FORGE_REPO FORGE_HOST; _forge_load_conf; one="${FORGE_REPO:-}"
+  CUR="$T/r2"; unset FORGE_REPO FORGE_HOST; _forge_load_conf; two="${FORGE_REPO:-}"
+  [ "$one" = a/one ] && [ "$two" = b/two ]
+)
+[ $? -eq 0 ] && ok "the memo is keyed on the repo root, so moving repos re-reads (#78.1)" \
+  || bad "memo keyed on root"
+
+# --- #78.2: the HTTP status is surfaced, not flattened into exit 22 ----------------------------
+# `curl -f` collapsed every >=400 into exit 22 with no body and no status, so a caller could not
+# tell 404 (an org with no labels: fine) from 401 or 500 (a real failure).
+grep -qE '^[^#]*curl -f' "$LIB" && bad "no curl -f INVOCATION remains (it flattens the status)" \
+  || ok "no curl -f invocation remains (it flattens the status)"
+grep -q 'return 44' "$LIB" && ok "forge_api reports 404 as exit 44, a channel that survives \$( ) (#78.2)" \
+  || bad "forge_api reports the status as an exit code"
+# forge_issue_label must treat an org 404 as ordinary and anything else as flagged.
+(
+  . "$LIB"
+  export FORGE_HOST=forgejo FORGE_REPO=o/r
+  forge_api() { case "$2" in *"/repos/"*) printf '[{"id":1,"name":"bug"}]' ;; *) return 1 ;; esac; }
+  forge_api_paginate() {
+    case "$1" in
+      /orgs/*) return 44 ;;
+      *) printf '[{"id":1,"name":"bug"}]' ;;
+    esac
+  }
+  err=$(forge_issue_label 7 nope 2>&1 >/dev/null)
+  printf '%s' "$err" | grep -q 'org-level labels could not be listed' && exit 1 || exit 0
+)
+[ $? -eq 0 ] && ok "an org 404 is not reported as an org-access failure (#78.2)" \
+  || bad "org 404 is treated as ordinary"
+(
+  . "$LIB"
+  export FORGE_HOST=forgejo FORGE_REPO=o/r
+  forge_api_paginate() {
+    case "$1" in
+      /orgs/*) return 22 ;;
+      *) printf '[{"id":1,"name":"bug"}]' ;;
+    esac
+  }
+  err=$(forge_issue_label 7 nope 2>&1 >/dev/null)
+  printf '%s' "$err" | grep -q 'org-level labels could not be listed'
+)
+[ $? -eq 0 ] && ok "an org 401 IS reported as an org-access failure (#78.2)" \
+  || bad "org 401 is flagged"
+
+# --- #78.3: one temp dir per process, and no leak on a signal ----------------------------------
+grep -q 'mktemp)' "$LIB" && bad "no bare per-call mktemp files remain (#78.3)" \
+  || ok "no bare per-call mktemp files remain (#78.3)"
+# The helper must SET a variable, never print a path: a caller reading it with $( ) would run it
+# in a subshell, discarding both the assignment and the trap, so every call would leak a dir.
+grep -q '_forge_tmp_init' "$LIB" && ok "the temp dir is created via a variable, not \$( ) (#78.3)" \
+  || bad "temp dir helper sets a variable"
+# And it must not clobber a caller's existing EXIT trap.
+(
+  . "$LIB"
+  trap 'printf CALLER' EXIT
+  _forge_tmp_init
+  t=$(trap -p EXIT); case "$t" in *CALLER*) exit 0 ;; *) exit 1 ;; esac
+)
+[ $? -eq 0 ] && ok "a caller's existing EXIT trap is not overwritten (#78.3)" \
+  || bad "caller EXIT trap preserved"
+
 echo ""
 echo "forge-lib tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
