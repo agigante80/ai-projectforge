@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-labels-version: 6
+# sync-labels-version: 7
 # sync-labels.sh: make the host's labels match `.github/labels.yml`, or report that they do not.
 #
 # WHY THIS EXISTS (issue #104). forge-kit shipped a label taxonomy, documented that labels drive
@@ -21,7 +21,7 @@
 # Exit codes are distinguishable, because this runs from automation:
 #   0  in sync (or synced successfully)
 #   1  --check found drift (the repo needs syncing; nothing is wrong with the tooling)
-#   2  usage or environment error (bad flag, no labels file, no jq, unresolvable repo)
+#   2  usage or environment error (bad flag, no labels file, no jq, bash < 4, unresolvable repo)
 #   3  the declaration is malformed; NOTHING was written
 #   4  a write failed part-way; the host may be partially synced
 #
@@ -63,6 +63,13 @@ fi
   echo "sync-labels: no labels file found (looked for .github/labels.yml)" >&2; exit 2; }
 
 command -v jq >/dev/null 2>&1 || { echo "sync-labels: jq is required" >&2; exit 2; }
+# bash 4+ for the associative-array lookup. This IS a new floor (the pre-#121 version ran on the
+# bash 3.2 macOS still ships), so it is checked, not assumed: unguarded, `declare -A` fails, the
+# script continues because there is no -e, and it exits 1, which this script defines as "check
+# found drift". Automation would then re-run it forever against a tooling fault.
+[ "${BASH_VERSINFO[0]:-0}" -ge 4 ] || {
+  echo "sync-labels: requires bash 4+ (associative arrays); found ${BASH_VERSION:-unknown}" >&2
+  exit 2; }
 
 REPO="${REPO_OVERRIDE:-$(forge_repo)}"
 [ -n "$REPO" ] || { echo "sync-labels: could not resolve the repo" >&2; exit 2; }
@@ -151,15 +158,18 @@ while IFS="$US" read -r name color desc; do
     *$'\x01'UNTERMINATED*)
       echo "sync-labels: an entry has an unterminated quoted value" >&2; errs=$((errs + 1)); continue ;;
   esac
-  case "$US$seen_names$US" in
-    *"$US$name$US"*) echo "sync-labels: '$name' is declared more than once" >&2; errs=$((errs + 1)); continue ;;
-  esac
-  [ -z "$name" ] || seen_names="$seen_names$US$name"
+  # Empty-name FIRST: the duplicate pattern below is *US US*, which an empty name always matches
+  # against a subject that starts with US, so checking duplicates first reported every empty name
+  # as a duplicate and left this branch unreachable.
   if [ -z "$name" ]; then
     # Covers a bare `- name:` with no other fields too: skipping empty records here is what let
     # M1's own case through the first time.
     echo "sync-labels: an entry has an empty name" >&2; errs=$((errs + 1)); continue
   fi
+  case "$US$seen_names$US" in
+    *"$US$name$US"*) echo "sync-labels: '$name' is declared more than once" >&2; errs=$((errs + 1)); continue ;;
+  esac
+  seen_names="$seen_names$US$name"
   case "$name" in
     .|..) echo "sync-labels: '$name' is a dot path segment; refused because it can escape the URL path" >&2
                errs=$((errs + 1)) ;;
@@ -191,12 +201,16 @@ printf '%s' "$existing" | jq -e 'type == "array"' >/dev/null 2>&1 || {
 # description yields the empty string, values compare as strings.
 # Requires bash 4 for the associative array. The script is already bash-only ($'\x1f',
 # ${BASH_SOURCE[0]}), so this adds no new floor, but the floor is now load-bearing.
-declare -A _H_COLOR _H_DESC _H_ID _H_SEEN
-while IFS="$US" read -r _n _c _d _i; do
+declare -A _H_COLOR _H_DESC _H_ID _H_SEEN _H_ML
+while IFS="$US" read -r _n _c _d _i _ml; do
   [ -n "$_n" ] || continue
   _H_SEEN["$_n"]=1; _H_COLOR["$_n"]="$_c"; _H_DESC["$_n"]="$_d"; _H_ID["$_n"]="$_i"
+  _H_ML["$_n"]="$_ml"
 done < <(printf '%s' "$existing" | jq -r --arg us "$US" \
-  '.[] | [(.name // ""), (.color // ""), (.description // ""), (.id // "" | tostring)] | join($us)')
+  '.[] | [(.name // "" | gsub("\n"; " ")), (.color // ""),
+          (.description // "" | gsub("\n"; " ")), (.id // "" | tostring),
+          (if ((.name // "") + (.description // "") | test("\n")) then "ML" else "" end)]
+        | join($us)')
 
 host_has()   { [ -n "${_H_SEEN[$1]:-}" ]; }
 host_field() {  # host_field <name> <color|description|id> -> value, empty when absent
@@ -232,7 +246,11 @@ while IFS="$US" read -r name color desc; do
   cur_desc=$(host_field "$name" description)
   # Colour comparison ignores case and a leading '#': hosts normalise differently and that is not
   # drift anyone means. Descriptions are compared EXACTLY, case included.
-  if [ "$(norm_color "$cur_color")" != "$(norm_color "$color")" ] || [ "$cur_desc" != "$desc" ]; then
+  # A multi-line host description is ALWAYS drift: a declared description is single-line by
+  # construction, so the two cannot be equal, and the stored copy has had its newlines flattened
+  # for display and so must not be compared.
+  if [ -n "${_H_ML[$name]:-}" ] \
+     || [ "$(norm_color "$cur_color")" != "$(norm_color "$color")" ] || [ "$cur_desc" != "$desc" ]; then
     drifted=$((drifted + 1))
     report="${report}  drifted  $name (color '$cur_color' vs '$color'; description '$cur_desc' vs '$desc')"$'\n'
     if [ "$MODE" = sync ]; then

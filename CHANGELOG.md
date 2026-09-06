@@ -51,8 +51,8 @@ tracks the repository, so users are already served from the default branch.
 - **sync-labels hardening and reach** (#120, #121, #122). It now refuses an unterminated quoted
   value, a duplicate declared name and an empty flag value rather than accepting each silently;
   it builds the host lookup in ONE jq pass instead of three or four per label (62 processes to 3
-  for 20 labels); and `forge-adapt` offers the label taxonomy through its `templates` path on any
-  host, so a GitHub-only project no longer has to install forge-host to get the applier.
+  for 20 labels); It also refuses to run on bash 3, where the associative-array lookup silently fails with an
+  exit code this script reserves for "drift found". #120 is NOT included: see that ticket.
 - **`ticket-standards.md` carries two version markers instead of one overloaded integer** (#94,
   question 2). `template-version` says which FORM the doc describes and stays locked to the five
   work templates; the new `doc-rules-version` says which revision the RULES TEXT is at and moves

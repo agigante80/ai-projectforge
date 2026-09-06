@@ -32,17 +32,3 @@ project's own jurisdiction, and forge-kit names none anywhere in its defaults (i
 Installing it silently would put an unfilled template in the project and a `privacy` label
 route pointing at nothing. Recommend it, say it needs their regime filled in, and let them
 choose. Rule 4's seven regime-agnostic facts already bind without it.
-
-**The label taxonomy is repo-level governance, and it reaches a project through `templates`, not
-through forge-host (issue #120).** Copy `.github/labels.yml` AND
-`forge-host/assets/sync-labels.sh` AND `forge-host/assets/forge-lib.sh` into the project, then run
-`sync-labels.sh` once. All three, even for a GitHub-only project that wants nothing else from
-forge-host: sync-labels sources forge-lib from its own directory, so the two travel together.
-
-Why it is not optional for a project taking the governance components: `ticket-gate`'s lens routing
-reads labels, so `security`, `critical`, `api` and `privacy` are executable inputs. Routing to a
-label nobody created is exactly the #104 defect, where forge-kit itself declared 18 labels and held
-4, and its most distinctive mechanism was unexercisable in the repo that ships it.
-
-Offering it only through forge-host, as the first version did, put the applier where it is least
-needed (a Forgejo migration) and out of reach where it is most ordinary (a GitHub-only repo).

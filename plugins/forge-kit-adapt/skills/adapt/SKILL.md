@@ -13,7 +13,7 @@ description: >
   Backward-compatible: also triggered by "upgrade-audit".
 ---
 
-<!-- forge-adapt-version: 50 -->
+<!-- forge-adapt-version: 51 -->
 
 # forge-adapt
 
@@ -356,7 +356,7 @@ Setup signals suggest it wants them.)
 
 Reply:
 - names to install (I adapt each to your stack), "all", or "none"
-- "templates" - install/upgrade the issue-template set inline (adapted to your packages), the optional lockstep guard + ticket-standards doc, and the label taxonomy.
+- "templates" - install/upgrade the issue-template set inline (adapted to your packages) plus the optional lockstep guard + ticket-standards doc. No separate command needed.
 - "refresh <name>" - deep-compare one installed component and merge genuine improvements
 - "refresh" - full drift report (writes nothing)
 - "more subagents" / "more skills" / "more commands" / "more hooks" - full catalogue for a category, as a table
@@ -805,7 +805,6 @@ Confirm: `✓ ticket-standards doc written at v$PRJ_TPL_VER; gate + CLAUDE.md re
   never a failure. A block that exits non-zero surfaces as "Failed to run" and alarms the user. Use
   `shopt -s nullglob` for catalogue globs and end multi-command probes with a trailing `true`.
 - **Template governance is repo-level and opt-in.** Offer the lockstep guard + canonical doc only
-  when the project has versioned issue templates. Offer the label taxonomy too, on ANY host; see
-  `references/skills.md` for what to copy and why. The guard and its test are copied verbatim
+  when the project has versioned issue templates. The guard and its test are copied verbatim
   (host-agnostic); the canonical doc is adapted with its `template-version` marker set to the
   PROJECT's template version, and an existing project doc is refreshed report-first, never clobbered.

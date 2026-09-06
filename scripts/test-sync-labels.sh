@@ -301,6 +301,61 @@ out=$(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$REQLOG" bash ./sync-labels.
   && ok "a null host description equals an empty declared one (no phantom drift)" \
   || bad "null description handling (rc=$rc: $out)"
 
+# --- 8i. round-1 findings on the #121/#122 change ----------------------------------------------
+# H1: bash 4 is a real new floor (the pre-#121 version ran on the bash 3.2 macOS ships). Unguarded,
+# `declare -A` fails, the script continues without -e, and it exits 1, which this script defines as
+# "check found drift" - so automation re-runs forever against a tooling fault. The guard must exit 2.
+sed 's/${BASH_VERSINFO\[0\]:-0}/${FAKE_BASH_MAJOR:-9}/' "$SRC" > "$T/sl-fakever.sh"
+printf -- '- name: bug\n  color: "ffffff"\n  description: X\n' > "$T/labels.one.yml"
+host_json '[]'
+out=$(cd "$T" && FAKE_BASH_MAJOR=3 HOST_LABELS="$T/host.json" REQLOG="$T/req.log" \
+      bash ./sl-fakever.sh --labels "$T/labels.one.yml" --check 2>&1); rc=$?
+[ "$rc" -eq 2 ] && ok "bash < 4 is an ENVIRONMENT error (2), never the drift code (1)" \
+  || bad "bash < 4 exits 2 (rc=$rc: $out)"
+printf '%s' "$out" | grep -q 'requires bash 4' && ok "...and says which version it found" \
+  || bad "the bash-version message names the requirement"
+
+# H2: `join` emits one LINE per label but `read` consumes one line, so a newline in a host
+# description split the record: the id was lost and real drift was reported as IN SYNC. A declared
+# description is single-line by construction, so a multi-line host one is drift by definition.
+host_json '[{"id":7,"name":"bug","color":"ffffff","description":"one\ntwo"}]'
+printf -- '- name: bug\n  color: "ffffff"\n  description: one\n' > "$T/labels.nl.yml"
+REQLOG="$T/req.log"; : > "$REQLOG"
+out=$(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$REQLOG" bash ./sync-labels.sh --labels "$T/labels.nl.yml" --check 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "a multi-line host description is reported as drift, not as in-sync" \
+  || bad "multi-line host description is drift (rc=$rc: $out)"
+REQLOG="$T/req.log"; : > "$REQLOG"
+(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$REQLOG" bash ./sync-labels.sh --labels "$T/labels.nl.yml" >/dev/null 2>&1)
+grep -q '^PATCH /repos/o/r/labels/' "$REQLOG" \
+  && ok "...and sync repairs it, so the run converges" || bad "multi-line drift is repaired"
+
+# The case that makes the multi-line FLAG load-bearing rather than decorative: newlines are
+# flattened to spaces for storage, so a host description of "one\ntwo" flattens to "one two" and
+# would compare EQUAL to a declared "one two". The host still differs from the declaration, so
+# without the flag this reports in-sync forever. Found because a mutant removing the flag survived
+# the test above, which the gsub alone already satisfied.
+host_json '[{"id":7,"name":"bug","color":"ffffff","description":"one\ntwo"}]'
+printf -- '- name: bug\n  color: "ffffff"\n  description: one two\n' > "$T/labels.nl2.yml"
+REQLOG="$T/req.log"; : > "$REQLOG"
+out=$(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$REQLOG" bash ./sync-labels.sh --labels "$T/labels.nl2.yml" --check 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "a host description whose FLATTENED form matches is still drift" \
+  || bad "flattened-equal multi-line description is drift (rc=$rc: $out)"
+
+# H3: the duplicate pattern is *US US*, which an empty name always matches, so every empty name
+# was reported as a duplicate and the empty-name branch was unreachable.
+exit_case "an empty name is diagnosed as empty, not as a duplicate" \
+  '- name:\n  color: "ffffff"\n  description: X\n' 3 0
+out=$(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$T/req.log" \
+      bash ./sync-labels.sh --labels "$T/labels.x.yml" 2>&1)
+printf '%s' "$out" | grep -q 'empty name' && ok "...with the empty-name message" \
+  || bad "empty name message (got: $out)"
+
+# H6: the unterminated sentinel is checked across ALL THREE fields, not just description.
+exit_case "an unterminated quote in the NAME refuses" \
+  '- name: "bug\n  color: "ffffff"\n  description: X\n' 3 0
+exit_case "an unterminated quote in the COLOR refuses" \
+  '- name: bug\n  color: "ffffff\n  description: X\n' 3 0
+
 # --- 8e. the four exit codes are DISTINGUISHABLE ------------------------------------------------
 # Every assertion above used -ne 0, so all four codes were interchangeable to the suite and three
 # separate exit-code mutations survived.
