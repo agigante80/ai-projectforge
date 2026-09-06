@@ -227,6 +227,33 @@ clean_case "a comment containing quotes does not extend the value" \
   '- name: bug\n  color: "d73a4a"\n  description: "needs triage" # see "triage" doc\n' \
   '{"name":"bug","color":"d73a4a","description":"needs triage"}'
 
+# --- 8f. round-3 regressions in clean() --------------------------------------------------------
+# A6: \" is YAML's escape for a literal quote inside a double-quoted scalar. index() cut at the
+# ESCAPE, so `the \"critical\" label` was written as `the \` : a silent wrong write with a green
+# suite, and a regression against the version before it.
+clean_case "a backslash-escaped quote does not truncate the value" \
+  '- name: bug\n  color: "d73a4a"\n  description: "the \\"critical\\" label"\n' \
+  '{"name":"bug","color":"d73a4a","description":"the \"critical\" label"}'
+
+# A8: `color: #d73a4a` is a COMMENT in YAML, so the value is null. Trimming before the comment
+# strip removed the space the comment rule needs, and the leading-# strip then made it look valid.
+# Any real YAML parser reads null here, so accepting it would make two tools disagree on one file.
+exit_case "an unquoted # value is a YAML comment, not a colour" \
+  '- name: bug\n  color: #d73a4a\n  description: X\n' 3 0
+# ...while the QUOTED form stays accepted, which is what A1 was actually about.
+exit_case "a QUOTED #-colour is still accepted" \
+  '- name: bug\n  color: "#d73a4a"\n  description: X\n' 0 1
+
+# A7: the guard globbed `...*`, which means "starts with three dots", not "dot-only". It refused
+# `...and more` with a message calling it dot-only, and validation is all-or-nothing, so ONE such
+# name failed the entire file. Only `.` and `..` resolve as path segments.
+exit_case "a name merely STARTING with dots is not refused" \
+  '- name: ...and more\n  color: "ffffff"\n  description: X\n' 0 1
+exit_case "a leading-dot name like .github is not refused" \
+  '- name: .github\n  color: "ffffff"\n  description: X\n' 0 1
+exit_case "a bare .. is still refused" \
+  '- name: ..\n  color: "ffffff"\n  description: X\n' 3 0
+
 # --- 8e. the four exit codes are DISTINGUISHABLE ------------------------------------------------
 # Every assertion above used -ne 0, so all four codes were interchangeable to the suite and three
 # separate exit-code mutations survived.

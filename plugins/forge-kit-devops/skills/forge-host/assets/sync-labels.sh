@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-labels-version: 3
+# sync-labels-version: 4
 # sync-labels.sh: make the host's labels match `.github/labels.yml`, or report that they do not.
 #
 # WHY THIS EXISTS (issue #104). forge-kit shipped a label taxonomy, documented that labels drive
@@ -79,15 +79,26 @@ declared=$(awk -v US="$US" '
   # SQ/DQ are built from character codes so this program contains no literal quote of either kind:
   # it is embedded in a single-quoted shell string, and nested quoting is where the first attempt
   # at this function went wrong.
-  BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34) }
-  function clean(v,   i, n, ch, out) {
+  BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92) }
+  function clean(v,   i, n, ch, out, raw) {
     sub(/\r$/, "", v)
+    raw = v
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
     # A quoted value ends at its CLOSING quote, found from the LEFT; anything after it (a
     # ` # comment`) is discarded. index/substr rather than sub(): POSIX awk has no capture-group
     # backreference in a replacement, so a /^([^"]*)".*$/ form silently inserts a literal \1.
     if (substr(v, 1, 1) == DQ) {
-      v = substr(v, 2); i = index(v, DQ); if (i > 0) v = substr(v, 1, i - 1); return v
+      # YAML escapes a literal quote inside a double-quoted scalar as \" , so index() would cut at
+      # the ESCAPE and destroy the rest of the value. Skip an escaped quote the way the single-quote
+      # branch skips a doubled one.
+      v = substr(v, 2); out = ""; n = length(v)
+      for (i = 1; i <= n; i++) {
+        ch = substr(v, i, 1)
+        if (ch == BS && substr(v, i + 1, 1) == DQ) { out = out DQ; i++; continue }
+        if (ch == DQ) break
+        out = out ch
+      }
+      return out
     }
     if (substr(v, 1, 1) == SQ) {
       # YAML doubles a single quote to escape it, so the closing quote is the first SQ NOT
@@ -100,8 +111,8 @@ declared=$(awk -v US="$US" '
       }
       return out
     }
-    sub(/[[:space:]]+#.*$/, "", v)
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+    sub(/[[:space:]]+#.*$/, "", raw)
+    v = raw; gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
     return v
   }
   /^[[:space:]]*#/ || /^[[:space:]]*\r?$/ { next }
@@ -131,7 +142,7 @@ while IFS="$US" read -r name color desc; do
     echo "sync-labels: an entry has an empty name" >&2; errs=$((errs + 1)); continue
   fi
   case "$name" in
-    .|..|...*) echo "sync-labels: '$name' is a dot-only name; refused because it can escape a URL path segment" >&2
+    .|..) echo "sync-labels: '$name' is a dot path segment; refused because it can escape the URL path" >&2
                errs=$((errs + 1)) ;;
   esac
   case "$color" in
