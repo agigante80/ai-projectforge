@@ -10,6 +10,10 @@
 #     (atomic, non-zero exit, stderr names the labels), zero-label repos get a distinct
 #     message, and nothing is POSTed on refusal
 #   - FORGE_DRY_RUN=1 sends nothing on either function
+#   - #78: the config memo actually SAVES work (measured with a counting git on PATH), the
+#     forgejo arm of forge_api behaviourally (200/404/401/500/transport/empty/multiline via a
+#     stubbed curl), and the temp dir (created once, trapped when the caller has no trap,
+#     removed on the normal path)
 # The github branches shell out to `gh` and are unchanged by #62/#63; they are exercised by
 # real use, not stubbed here.
 set -uo pipefail
@@ -282,7 +286,7 @@ esac
   mkdir -p "$T/memo"
   _forge_root() { printf '%s' "$T/memo"; }
   printf 'FORGE_HOST=forgejo\nFORGE_REPO=a/one\n' > "$T/memo/.forge.conf"
-  unset FORGE_REPO FORGE_HOST _FORGE_CONF_ROOT
+  unset FORGE_REPO FORGE_HOST _FORGE_CONF_PWD
   _forge_load_conf; first="${FORGE_REPO:-}"
   printf 'FORGE_HOST=forgejo\nFORGE_REPO=b/two\n' > "$T/memo/.forge.conf"
   unset FORGE_REPO
@@ -292,20 +296,22 @@ esac
 [ $? -eq 0 ] && ok "the config file is parsed ONCE per root, so a mid-process edit is not re-read (#78.1)" \
   || bad "config load is memoized (#78.1)"
 
-# The memo is keyed on the ROOT, not a bare boolean, so a caller that moves between repos is
-# still correct. Two roots must both be loadable in one process.
+# The memo must actually SAVE work, not merely be present. This measures it the way the round-1
+# review did, with a counting `git` on PATH: an earlier version guarded on the resolved root, which
+# runs `git rev-parse` BEFORE the guard, so it cost the same 25 calls it was meant to remove.
 (
-  . "$LIB"
-  mkdir -p "$T/r1" "$T/r2"
-  printf 'FORGE_HOST=forgejo\nFORGE_REPO=a/one\n' > "$T/r1/.forge.conf"
-  printf 'FORGE_HOST=forgejo\nFORGE_REPO=b/two\n' > "$T/r2/.forge.conf"
-  _forge_root() { printf '%s' "$CUR"; }
-  CUR="$T/r1"; unset FORGE_REPO FORGE_HOST; _forge_load_conf; one="${FORGE_REPO:-}"
-  CUR="$T/r2"; unset FORGE_REPO FORGE_HOST; _forge_load_conf; two="${FORGE_REPO:-}"
-  [ "$one" = a/one ] && [ "$two" = b/two ]
+  M="$T/measure"; mkdir -p "$M/bin"; ( cd "$M" && git init -q . )
+  printf 'FORGE_HOST=forgejo\nFORGE_API_URL=https://x/api/v1\nFORGE_REPO=o/r\nFORGE_TOKEN_ENV=TK\n' > "$M/.forge.conf"
+  printf '#!/bin/sh\necho x >> "$GITLOG"\nexec %s "$@"\n' "$(command -v git)" > "$M/bin/git"; chmod +x "$M/bin/git"
+  printf '#!/bin/sh\nn=$(cat "$PAGEC" 2>/dev/null||echo 0);n=$((n+1));echo $n>"$PAGEC"\nif [ $n -le 5 ]; then printf "[{\\"id\\":1}]\\n200"; else printf "[]\\n200"; fi\n' > "$M/bin/curl"
+  chmod +x "$M/bin/curl"; : > "$M/gitlog"; : > "$M/pagec"
+  ( export PATH="$M/bin:$PATH" GITLOG="$M/gitlog" PAGEC="$M/pagec" TK=tok
+    cd "$M" && . "$LIB" && forge_api_paginate "/repos/o/r/labels" >/dev/null 2>&1 )
+  n=$(wc -l < "$M/gitlog" | tr -d ' ')
+  [ "$n" -le 3 ]
 )
-[ $? -eq 0 ] && ok "the memo is keyed on the repo root, so moving repos re-reads (#78.1)" \
-  || bad "memo keyed on root"
+[ $? -eq 0 ] && ok "the memo actually saves work: a 6-page paginate makes <=3 git calls (#78.1)" \
+  || bad "the memo saves work (a 6-page paginate should make <=3 git calls)"
 
 # --- #78.2: the HTTP status is surfaced, not flattened into exit 22 ----------------------------
 # `curl -f` collapsed every >=400 into exit 22 with no body and no status, so a caller could not
@@ -357,10 +363,79 @@ grep -q '_forge_tmp_init' "$LIB" && ok "the temp dir is created via a variable, 
   . "$LIB"
   trap 'printf CALLER' EXIT
   _forge_tmp_init
-  t=$(trap -p EXIT); case "$t" in *CALLER*) exit 0 ;; *) exit 1 ;; esac
+  t=$(trap -p EXIT)
+  rm -rf "${_FORGE_TMPDIR-}"          # this case makes a dir and no file, so clean it here
+  case "$t" in *CALLER*) exit 0 ;; *) exit 1 ;; esac
 )
 [ $? -eq 0 ] && ok "a caller's existing EXIT trap is not overwritten (#78.3)" \
   || bad "caller EXIT trap preserved"
+
+# --- #78.2 BEHAVIOURAL: drive forge_api's forgejo arm with a stubbed curl on PATH ---------------
+# Round 1 of this change had only source greps here, two of which could not fail (one grepped for
+# the name of a function the library defines; one was satisfied by a comment). Nine of twelve
+# mutations survived. These drive the real code path.
+api_case() {  # api_case <desc> <curl-output> <expected-rc> <expected-stdout>
+  local d="$1" out="$2" want_rc="$3" want_body="$4" A; A="$T/api"; rm -rf "$A"; mkdir -p "$A/bin"
+  printf '#!/bin/sh\nprintf %s "$CURLOUT"\n' "'%s'" > "$A/bin/curl"; chmod +x "$A/bin/curl"
+  got=$( export PATH="$A/bin:$PATH" CURLOUT="$out" FORGE_HOST=forgejo FORGE_REPO=o/r \
+                FORGE_API_URL=https://x/api/v1 FORGE_TOKEN_ENV=TK TK=tok
+         . "$LIB" 2>/dev/null; forge_api GET /repos/o/r/x 2>/dev/null ); rc=$?
+  if [ "$rc" = "$want_rc" ] && [ "$got" = "$want_body" ]; then ok "$d"
+  else bad "$d (rc=$rc want $want_rc; body=[$got] want [$want_body])"; fi
+}
+api_case "a 200 returns the body and exit 0"            '{"a":1}
+200' 0 '{"a":1}'
+api_case "a 404 returns 44, the ordinary not-found code" '{"message":"Not Found"}
+404' 44 '{"message":"Not Found"}'
+api_case "a 401 returns 22, distinct from 404"           '{"message":"Bad credentials"}
+401' 22 '{"message":"Bad credentials"}'
+api_case "a 500 returns 22"                              'boom
+500' 22 'boom'
+api_case "an empty 200 body is returned as empty"        '
+200' 0 ''
+api_case "a body containing newlines survives the split" 'line1
+line2
+200' 0 'line1
+line2'
+
+# A TRANSPORT failure must surface curl's own exit code, not be flattened into 22. Flattening is
+# precisely what `curl -f` did and what #78.2 exists to stop.
+(
+  A="$T/api2"; rm -rf "$A"; mkdir -p "$A/bin"
+  printf '#!/bin/sh\nexit 7\n' > "$A/bin/curl"; chmod +x "$A/bin/curl"
+  export PATH="$A/bin:$PATH" FORGE_HOST=forgejo FORGE_REPO=o/r FORGE_API_URL=https://x/api/v1 \
+         FORGE_TOKEN_ENV=TK TK=tok
+  . "$LIB" 2>/dev/null; forge_api GET /repos/o/r/x >/dev/null 2>&1; [ $? -eq 7 ]
+)
+[ $? -eq 0 ] && ok "a transport failure keeps curl's own exit code, not 22 (#78.2)" \
+  || bad "transport failure keeps curl's exit code"
+
+# The EXIT trap must actually be installed when the caller has none, or #78.3's signal half does
+# nothing.
+# `trap - EXIT` first: a ( ) subshell REPORTS the parent script's EXIT trap, so without clearing
+# it this case cannot express "the caller has none". That inheritance is also why re-installing
+# a caller's trap was catastrophic: it then fires at SUBSHELL exit.
+( trap - EXIT; . "$LIB"; _forge_tmp_init; t=$(trap -p EXIT); rm -rf "${_FORGE_TMPDIR-}"
+  case "$t" in *_FORGE_TMPDIR*) exit 0 ;; *) exit 1 ;; esac )
+[ $? -eq 0 ] && ok "an EXIT trap IS installed when the caller has none (#78.3)" \
+  || bad "EXIT trap is installed when the caller has none"
+
+# The directory is created ONCE per process, not per call.
+( . "$LIB"; _forge_tmp_init; a="$_FORGE_TMPDIR"; _forge_tmp_init; b="$_FORGE_TMPDIR"
+  rm -rf "$a" "$b"; [ "$a" = "$b" ] )
+[ $? -eq 0 ] && ok "the temp dir is created once per process (#78.3)" || bad "temp dir created once"
+
+# And it is removed on the NORMAL path once the last file goes, which is what stops the leak when
+# the caller has its own EXIT trap and ours was therefore not installed.
+(
+  . "$LIB"
+  export FORGE_HOST=forgejo FORGE_REPO=o/r
+  forge_api() { case "$2" in *page=1*) printf '[{"id":1}]';; *) printf '[]';; esac; }
+  forge_api_paginate "/repos/o/r/labels" >/dev/null 2>&1
+  [ -z "${_FORGE_TMPDIR-}" ] || [ ! -d "$_FORGE_TMPDIR" ]
+)
+[ $? -eq 0 ] && ok "the temp dir is gone after a completed paginate (#78.3 leak fix)" \
+  || bad "temp dir removed after paginate"
 
 echo ""
 echo "forge-lib tests: $pass passed, $fail failed"
