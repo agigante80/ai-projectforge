@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# forge-lib-version: 6
+# forge-lib-version: 7
 # forge-lib.sh: host-aware forge operations (GitHub | Forgejo). Source it; governance components
 # call the forge_* functions instead of `gh` directly, so the same logic works whether a repo lives
 # on GitHub or a self-hosted Forgejo. ADDITIVE: a repo with no Forgejo config defaults to GitHub and
@@ -35,7 +35,7 @@ set -uo pipefail
 
 # Never inherit these: an inherited _FORGE_TMPDIR would be trusted, written to with a predictable
 # name and never cleaned; an inherited memo guard would suppress the first config load.
-unset _FORGE_TMPDIR _FORGE_CONF_PWD
+unset _FORGE_TMPDIR _FORGE_CONF_PWD _FORGE_FROM_FILE
 
 _forge_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
 
@@ -44,21 +44,25 @@ _forge_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
 # to re-run this about four times, via forge_host, forge_api_base and _forge_token, each costing a
 # `git rev-parse` plus a fork per config line.
 #
-# KNOWN LIMIT, stated because an earlier comment here claimed the opposite: this is NOT correct for
-# a process that moves between repos. The values are EXPORTED, so once repo A is loaded the
-# env-wins rule makes repo B's file a no-op. That was true before this memo existed too; the memo
-# does not cause it and does not fix it. A process that needs a second repo must unset the
-# FORGE_* variables itself.
+# Values set FROM THE FILE are tracked and cleared when the working directory changes, so a process
+# that moves between repos re-reads correctly. An earlier version of this comment claimed that
+# multi-repo breakage predated the memo; that was measurably wrong (the parent commit was correct),
+# and it was the memo's caller-shell loading that caused it. Values set in the ENVIRONMENT still
+# win over the file everywhere, and are never cleared.
 _forge_load_conf() {
   # The guard keys on $PWD, a shell builtin that costs nothing, NOT on the resolved root: resolving
   # the root runs `git rev-parse`, and doing that BEFORE the guard is why the first version of this
   # memo saved nothing measurable (25 git calls per 6-page paginate, before and after, measured).
   # $PWD is a sound proxy: the root cannot change without the working directory changing.
   local f line k v root
-  [ "${_FORGE_CONF_PWD-}" != "$PWD" ] || return 0
+  [ "${_FORGE_CONF_PWD-}" != "${PWD-}" ] || return 0
   root="$(_forge_root)"
-  [ -n "$root" ] || return 0            # no root: nothing to load
-  _FORGE_CONF_PWD="$PWD"
+  # Clear anything a PREVIOUS directory's file set, or env-wins would make the new file a no-op.
+  # Loading in the caller's shell (which is what makes the memo pay) means these values persist,
+  # so a process moving between repos would otherwise keep the first repo's identity.
+  for k in ${_FORGE_FROM_FILE-}; do unset "$k"; done
+  _FORGE_FROM_FILE=""
+  _FORGE_CONF_PWD="${PWD-}"
   f="$root/.forge.conf"
   [ -f "$f" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
@@ -70,7 +74,8 @@ _forge_load_conf() {
     v="${v%%#*}"; v="$(printf '%s' "$v" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^"//; s/"$//')"
     case "$k" in
       FORGE_HOST|FORGE_API_URL|FORGE_REPO|FORGE_TOKEN_ENV|FORGE_REMOTE|FORGE_NO_GIT_CREDENTIALS)
-        [ -n "${!k:-}" ] || { printf -v "$k" '%s' "$v"; export "$k"; } ;;  # env (if set) wins; else file
+        [ -n "${!k:-}" ] || { printf -v "$k" '%s' "$v"; export "$k"
+                              _FORGE_FROM_FILE="${_FORGE_FROM_FILE-} $k"; } ;;  # env wins; else file
     esac
   done < "$f"
 }
@@ -245,7 +250,7 @@ forge_api_paginate() {
     page=$((page + 1))
     if [ "$page" -gt "$cap" ]; then
       echo "forge-lib: paginate: exceeded $cap pages on ${path}; server may be ignoring the page param" >&2
-      rm -f "$tmp"; return 2
+      _forge_tmp_done "$tmp"; return 2
     fi
   done
   jq -sc 'add // []' "$tmp"; rc=$?
@@ -266,13 +271,16 @@ forge_api_paginate() {
 # return paths still remove the file and the SIGNAL case is the caller's to handle; that cannot be
 # fixed from inside a library, so it is stated rather than hidden.
 _forge_tmp_init() {
-  [ -z "${_FORGE_TMPDIR-}" ] || return 0
+  # Check the DIRECTORY, not just the variable: a subshell that finished a paginate may have
+  # rmdir'd it, and its `unset` cannot escape the subshell, so the parent can hold a stale path.
+  if [ -n "${_FORGE_TMPDIR-}" ] && [ -d "$_FORGE_TMPDIR" ]; then return 0; fi
   _FORGE_TMPDIR="$(mktemp -d)" || return 2
   # Install ONLY when the caller has no EXIT trap. Re-installing the caller's command is worse than
   # standing aside: a subshell that inherits the trap string would then run the CALLER's cleanup at
   # SUBSHELL exit, tearing down the caller's state mid-run. Measured, painfully: appending to the
   # trap made this repo's own suite delete its scratch dir in the middle of a test.
   [ -n "$(trap -p EXIT)" ] || trap 'rm -rf "${_FORGE_TMPDIR-}"' EXIT
+  return 0
 }
 
 # _forge_tmp_done <file>  drop a temp file and, when it was the last one, the directory too.

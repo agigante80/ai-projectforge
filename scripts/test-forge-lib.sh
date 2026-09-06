@@ -356,8 +356,8 @@ grep -q 'mktemp)' "$LIB" && bad "no bare per-call mktemp files remain (#78.3)" \
   || ok "no bare per-call mktemp files remain (#78.3)"
 # The helper must SET a variable, never print a path: a caller reading it with $( ) would run it
 # in a subshell, discarding both the assignment and the trap, so every call would leak a dir.
-grep -q '_forge_tmp_init' "$LIB" && ok "the temp dir is created via a variable, not \$( ) (#78.3)" \
-  || bad "temp dir helper sets a variable"
+# (The grep that used to sit here searched for the name of a function the library defines, so it
+# could only fail once ten other tests already had. The behavioural cases below replace it.)
 # And it must not clobber a caller's existing EXIT trap.
 (
   . "$LIB"
@@ -436,6 +436,69 @@ line2'
 )
 [ $? -eq 0 ] && ok "the temp dir is gone after a completed paginate (#78.3 leak fix)" \
   || bad "temp dir removed after paginate"
+
+# --- round-2 M4: the H1 fix (unique temp files) had NO behavioural coverage ---------------------
+# Reverting mktemp to "paginate.$$" passed all 32 tests. $$ is the PARENT pid in every subshell, so
+# two concurrent paginations shared one path and each returned the union of both streams.
+(
+  . "$LIB"
+  export FORGE_HOST=forgejo FORGE_REPO=o/r
+  _forge_tmp_init
+  forge_api() { case "$2" in *page=1*) printf '[{"n":"%s"}]' "$STREAM";; *) printf '[]';; esac; }
+  ( STREAM=A; forge_api_paginate /x > "$T/outA" 2>/dev/null ) &
+  ( STREAM=B; forge_api_paginate /x > "$T/outB" 2>/dev/null ) &
+  wait
+  a=$(jq -r '.[0].n' < "$T/outA" 2>/dev/null); b=$(jq -r '.[0].n' < "$T/outB" 2>/dev/null)
+  la=$(jq 'length' < "$T/outA" 2>/dev/null); lb=$(jq 'length' < "$T/outB" 2>/dev/null)
+  rm -rf "${_FORGE_TMPDIR-}"
+  [ "$la" = 1 ] && [ "$lb" = 1 ] && [ "$a" != "$b" ]
+)
+[ $? -eq 0 ] && ok "concurrent paginations do not share a temp file (round-2 H1)" \
+  || bad "concurrent paginations get their own streams"
+
+# --- round-2 HIGH 1: a finished subshell paginate must not wedge the parent --------------------
+# _forge_tmp_done rmdir's the shared dir and its `unset` cannot escape a subshell, so the parent
+# could be left holding a path that no longer exists and every later call died rc=2.
+(
+  . "$LIB"
+  export FORGE_HOST=forgejo FORGE_REPO=o/r FORGE_PAGINATE_MAX_PAGES=2
+  forge_api() { printf '[{"id":1}]'; }
+  forge_api_paginate /x >/dev/null 2>&1          # trips the cap, leaving the dir behind
+  forge_api() { printf '[]'; }
+  out=$(forge_api_paginate /x 2>/dev/null)        # a SUBSHELL that finishes and cleans up
+  forge_api_paginate /x >/dev/null 2>&1           # must still work in the parent
+  rc=$?; rm -rf "${_FORGE_TMPDIR-}"; [ "$rc" -eq 0 ]
+)
+[ $? -eq 0 ] && ok "a subshell paginate does not leave the parent holding a stale temp dir" \
+  || bad "parent survives a subshell paginate (round-2 HIGH)"
+
+# --- round-2 M2: loading the config in the caller's shell must not break multi-repo -------------
+(
+  . "$LIB"
+  mkdir -p "$T/rA" "$T/rB"; ( cd "$T/rA" && git init -q . ); ( cd "$T/rB" && git init -q . )
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/AAA\n' > "$T/rA/.forge.conf"
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/BBB\n' > "$T/rB/.forge.conf"
+  forge_api() { printf '[]'; }
+  cd "$T/rA"; forge_api_paginate /x >/dev/null 2>&1; a=$(forge_repo)
+  cd "$T/rB"; b=$(forge_repo)
+  rm -rf "${_FORGE_TMPDIR-}"
+  [ "$a" = owner/AAA ] && [ "$b" = owner/BBB ]
+)
+[ $? -eq 0 ] && ok "a process that moves between repos re-reads the second repo's config" \
+  || bad "multi-repo config re-read (round-2 M2)"
+
+# An ENV-provided value must still win over both files, and must never be cleared by the re-read.
+(
+  . "$LIB"
+  mkdir -p "$T/rC"; ( cd "$T/rC" && git init -q . )
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/FILE\n' > "$T/rC/.forge.conf"
+  export FORGE_REPO=owner/ENV FORGE_HOST=forgejo
+  cd "$T/rC"; forge_api() { printf '[]'; }; forge_api_paginate /x >/dev/null 2>&1
+  rm -rf "${_FORGE_TMPDIR-}"
+  [ "$(forge_repo)" = owner/ENV ]
+)
+[ $? -eq 0 ] && ok "an environment value still wins over the file, and survives a re-read" \
+  || bad "env-wins survives the multi-repo re-read"
 
 echo ""
 echo "forge-lib tests: $pass passed, $fail failed"
