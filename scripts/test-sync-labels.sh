@@ -341,6 +341,11 @@ out=$(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$REQLOG" bash ./sync-labels.
 [ "$rc" -eq 1 ] && ok "a host description whose FLATTENED form matches is still drift" \
   || bad "flattened-equal multi-line description is drift (rc=$rc: $out)"
 
+# The drift line must NAME the newline: without it the user sees four identical strings and is
+# told a label drifted, in exactly the case the flag exists for.
+printf '%s' "$out" | grep -q 'contains a newline' \
+  && ok "an ML-forced drift line explains itself" || bad "ML drift line names the newline (got: $out)"
+
 # H3: the duplicate pattern is *US US*, which an empty name always matches, so every empty name
 # was reported as a duplicate and the empty-name branch was unreachable.
 exit_case "an empty name is diagnosed as empty, not as a duplicate" \

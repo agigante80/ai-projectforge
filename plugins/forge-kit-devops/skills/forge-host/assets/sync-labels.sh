@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-labels-version: 7
+# sync-labels-version: 8
 # sync-labels.sh: make the host's labels match `.github/labels.yml`, or report that they do not.
 #
 # WHY THIS EXISTS (issue #104). forge-kit shipped a label taxonomy, documented that labels drive
@@ -199,8 +199,7 @@ printf '%s' "$existing" | jq -e 'type == "array"' >/dev/null 2>&1 || {
 # spawn jq three or four times per declared label: ~60 processes for this repo's 20, and 300 for a
 # project with 100, on every --check. Behaviour is unchanged: an absent label yields empty, a null
 # description yields the empty string, values compare as strings.
-# Requires bash 4 for the associative array. The script is already bash-only ($'\x1f',
-# ${BASH_SOURCE[0]}), so this adds no new floor, but the floor is now load-bearing.
+# Requires bash 4 for the associative array; the guard for that is at the top of the file.
 declare -A _H_COLOR _H_DESC _H_ID _H_SEEN _H_ML
 while IFS="$US" read -r _n _c _d _i _ml; do
   [ -n "$_n" ] || continue
@@ -252,7 +251,9 @@ while IFS="$US" read -r name color desc; do
   if [ -n "${_H_ML[$name]:-}" ] \
      || [ "$(norm_color "$cur_color")" != "$(norm_color "$color")" ] || [ "$cur_desc" != "$desc" ]; then
     drifted=$((drifted + 1))
-    report="${report}  drifted  $name (color '$cur_color' vs '$color'; description '$cur_desc' vs '$desc')"$'\n'
+    why=""
+    [ -z "${_H_ML[$name]:-}" ] || why="; the host value contains a newline, shown flattened"
+    report="${report}  drifted  $name (color '$cur_color' vs '$color'; description '$cur_desc' vs '$desc'$why)"$'\n'
     if [ "$MODE" = sync ]; then
       if [ "$_dry" = 1 ]; then
         echo "[dry-run] update label '$name' on $REPO" >&2
