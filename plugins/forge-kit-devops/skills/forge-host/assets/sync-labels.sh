@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# sync-labels-version: 1
+# sync-labels-version: 2
 # sync-labels.sh: make the host's labels match `.github/labels.yml`, or report that they do not.
 #
 # WHY THIS EXISTS (issue #104). forge-kit shipped a label taxonomy, documented that labels drive
 # ticket-gate's lens routing, and never imported it into its own repository: 18 labels declared,
 # 4 present. `security`, `critical` and `api` are executable inputs to the gate, so the kit's most
 # distinctive mechanism was unexercisable in the one repo guaranteed to be running it. The taxonomy
-# was a declarative file with no applier and no checker, and `docs/guides/labels.md` said only
-# "create all labels using gh label create", which is a manual instruction someone runs once.
+# was a declarative file with no applier and no checker.
 #
 # Host-aware via forge-lib.sh, because labels are already a forge_* concern (#63): GitHub takes
 # label NAMES on update, Forgejo takes label IDs, and this hides that difference the way
@@ -16,8 +15,15 @@
 # Usage:
 #   sync-labels.sh [--check] [--labels FILE] [--repo OWNER/NAME]
 #     default   create missing labels and update drifted ones
-#     --check   change nothing; exit 1 listing what is missing or drifted (for humans and CI)
-#   FORGE_DRY_RUN=1  print what would be written and send nothing (as elsewhere in forge-host)
+#     --check   change nothing; list what is missing or drifted
+#   FORGE_DRY_RUN=1  print what would be written and send nothing
+#
+# Exit codes are distinguishable, because this runs from automation:
+#   0  in sync (or synced successfully)
+#   1  --check found drift (the repo needs syncing; nothing is wrong with the tooling)
+#   2  usage or environment error (bad flag, no labels file, no jq, unresolvable repo)
+#   3  the declaration is malformed; NOTHING was written
+#   4  a write failed part-way; the host may be partially synced
 #
 # NEVER DELETES. A label on the host that is not declared is reported and left alone: GitHub ships
 # stock defaults (duplicate, help wanted, invalid, question, wontfix), projects add their own, and
@@ -27,17 +33,17 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=forge-lib.sh
 if [ -f "$HERE/forge-lib.sh" ]; then . "$HERE/forge-lib.sh"
-elif [ -f "$HERE/../../../../../scripts/forge-lib.sh" ]; then . "$HERE/../../../../../scripts/forge-lib.sh"
 else echo "sync-labels: forge-lib.sh not found next to this script" >&2; exit 2; fi
 
 MODE=sync
 LABELS_FILE=""
 REPO_OVERRIDE=""
+need_arg() { [ $# -ge 2 ] || { echo "sync-labels: $1 needs a value" >&2; exit 2; }; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --check)  MODE=check; shift ;;
-    --labels) LABELS_FILE="$2"; shift 2 ;;
-    --repo)   REPO_OVERRIDE="$2"; shift 2 ;;
+    --labels) need_arg "$@"; LABELS_FILE="$2"; shift 2 ;;
+    --repo)   need_arg "$@"; REPO_OVERRIDE="$2"; shift 2 ;;
     *) echo "sync-labels: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -56,95 +62,138 @@ command -v jq >/dev/null 2>&1 || { echo "sync-labels: jq is required" >&2; exit 
 REPO="${REPO_OVERRIDE:-$(forge_repo)}"
 [ -n "$REPO" ] || { echo "sync-labels: could not resolve the repo" >&2; exit 2; }
 
-# --- parse the declaration -------------------------------------------------------------------
-# Deliberately strict rather than tolerant. The accepted shape is exactly what forge-kit ships:
+# --- 1. parse the declaration ------------------------------------------------------------------
+# Deliberately strict. The accepted shape is what forge-kit ships:
 #   - name: <name>
 #     color: "<hex>"
 #     description: <free text>
-# An unrecognised non-blank, non-comment line is a hard ERROR, never a skip: silently ignoring a
-# malformed entry would drop a label from the sync and reproduce the very drift this script exists
-# to end, with a green exit code.
-declared=$(awk '
-  /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
-  /^-[[:space:]]+name:[[:space:]]*/ {
-    if (n != "") print n "\t" c "\t" d
-    n = $0; sub(/^-[[:space:]]+name:[[:space:]]*/, "", n); gsub(/^"|"$/, "", n)
-    c = ""; d = ""; next
+# Fields are emitted separated by US (\x1f), NOT tab: tab is IFS whitespace, so `read` collapses a
+# run of tabs into one delimiter and an entry missing `color:` would silently shift its description
+# into the colour field (issue #104 round-1 finding H1).
+# Values are cleaned: CR stripped (CRLF files), surrounding whitespace trimmed, a matched pair of
+# double or single quotes removed (with YAML's '' unescaping), and a trailing ` # comment` stripped
+# from UNQUOTED values only. Without this, a trailing space or a CRLF file silently creates a
+# phantom label and the script never converges.
+US=$'\x1f'
+declared=$(awk -v US="$US" '
+  function clean(v) {
+    sub(/\r$/, "", v)
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+    # A quoted value ends at its CLOSING quote; anything after it (a ` # comment`) is discarded.
+    # Checking for a quoted value BEFORE stripping comments is what matters: a `#` inside quotes is
+    # data, and stripping first would corrupt it.
+    if (v ~ /^"/)  { sub(/^"/, "", v);  if (v ~ /"/) sub(/"[^"]*$/, "", v);  return v }
+    if (v ~ /^'"'"'/) {
+      sub(/^'"'"'/, "", v); if (v ~ /'"'"'/) sub(/'"'"'[^'"'"']*$/, "", v)
+      gsub(/'"'"''"'"'/, "'"'"'", v); return v
+    }
+    sub(/[[:space:]]+#.*$/, "", v)
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+    return v
   }
-  /^[[:space:]]+color:[[:space:]]*/ {
-    c = $0; sub(/^[[:space:]]+color:[[:space:]]*/, "", c); gsub(/^"|"$/, "", c); sub(/^#/, "", c); next
+  /^[[:space:]]*#/ || /^[[:space:]]*\r?$/ { next }
+  /^-[[:space:]]+name:/ {
+    if (seen) print n US c US d
+    v = $0; sub(/^-[[:space:]]+name:/, "", v); n = clean(v); c = ""; d = ""; seen = 1; next
   }
-  /^[[:space:]]+description:[[:space:]]*/ {
-    d = $0; sub(/^[[:space:]]+description:[[:space:]]*/, "", d); gsub(/^"|"$/, "", d); next
-  }
+  /^[[:space:]]+color:/       { v = $0; sub(/^[[:space:]]+color:/, "", v);       c = clean(v); next }
+  /^[[:space:]]+description:/ { v = $0; sub(/^[[:space:]]+description:/, "", v); d = clean(v); next }
   { print "sync-labels: unparsable line " NR ": " $0 > "/dev/stderr"; bad = 1 }
-  END { if (n != "") print n "\t" c "\t" d; if (bad) exit 3 }
-' "$LABELS_FILE") || { echo "sync-labels: $LABELS_FILE is not in the expected shape; refusing to sync a partial set" >&2; exit 3; }
+  END { if (seen) print n US c US d; if (bad) exit 3 }
+' "$LABELS_FILE") || {
+  echo "sync-labels: $LABELS_FILE is not in the expected shape; refusing to sync a partial set" >&2
+  exit 3; }
 
 [ -n "$declared" ] || { echo "sync-labels: $LABELS_FILE declares no labels" >&2; exit 3; }
 
-# --- read the host's current labels (all pages) -----------------------------------------------
+# --- 2. validate EVERY entry before writing ANY of them ----------------------------------------
+# Validation is a separate pass on purpose: a bad entry halfway down the file must not be
+# discovered after the entries above it have already been created on the host.
+errs=0
+while IFS="$US" read -r name color desc; do
+  [ -n "$name$color$desc" ] || continue
+  if [ -z "$name" ]; then
+    echo "sync-labels: an entry has an empty name" >&2; errs=$((errs + 1)); continue
+  fi
+  case "$color" in
+    [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;;
+    "") echo "sync-labels: '$name' has no color (both hosts require one)" >&2; errs=$((errs + 1)) ;;
+    *)  echo "sync-labels: '$name' has color '$color', which is not 6 hex digits" >&2; errs=$((errs + 1)) ;;
+  esac
+done <<< "$declared"
+[ "$errs" -eq 0 ] || {
+  echo "sync-labels: $errs invalid entr(y|ies) in $LABELS_FILE; nothing was written" >&2; exit 3; }
+
+# --- 3. read the host's current labels ---------------------------------------------------------
+# FORGE_DRY_RUN is cleared around the READ. forge-lib's paginate short-circuits to [] under dry
+# run, which would make a dry run report every label as missing on a perfectly synced repo, and
+# `--check` a false alarm (round-1 finding H2). Reads have no side effect; only writes are gated.
+_dry="${FORGE_DRY_RUN:-0}"
+FORGE_DRY_RUN=0
 existing=$(forge_api_paginate "/repos/$REPO/labels") || {
-  echo "sync-labels: could not list labels on $REPO" >&2; exit 2; }
-echo "$existing" | jq -e 'type == "array"' >/dev/null 2>&1 || {
+  FORGE_DRY_RUN="$_dry"; echo "sync-labels: could not list labels on $REPO" >&2; exit 2; }
+FORGE_DRY_RUN="$_dry"
+printf '%s' "$existing" | jq -e 'type == "array"' >/dev/null 2>&1 || {
   echo "sync-labels: unexpected label-list response for $REPO" >&2; exit 2; }
 
 host_field() {  # host_field <name> <field>  -> the value, or empty when the label is absent
   printf '%s' "$existing" | jq -r --arg n "$1" --arg f "$2" \
     'map(select(.name == $n)) | if length == 0 then "" else (.[0][$f] // "" | tostring) end'
 }
+norm_color() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's/^#//'; }
 
 missing=0 drifted=0 created=0 updated=0
 report=""
 
-while IFS=$'\t' read -r name color desc; do
+while IFS="$US" read -r name color desc; do
   [ -n "$name" ] || continue
-  cur_color=$(host_field "$name" color)
-  cur_desc=$(host_field "$name" description)
   if [ -z "$(host_field "$name" name)" ]; then
     missing=$((missing + 1)); report="${report}  missing  $name"$'\n'
     if [ "$MODE" = sync ]; then
-      if [ "${FORGE_DRY_RUN:-0}" = 1 ]; then
+      if [ "$_dry" = 1 ]; then
         echo "[dry-run] create label '$name' (#$color) on $REPO" >&2
       else
         body=$(jq -nc --arg n "$name" --arg c "$color" --arg d "$desc" \
                  '{name:$n, color:$c, description:$d}')
         forge_api POST "/repos/$REPO/labels" "$body" >/dev/null || {
-          echo "sync-labels: failed to create '$name'" >&2; exit 1; }
+          echo "sync-labels: failed to create '$name'; the host may be partially synced" >&2; exit 4; }
       fi
       created=$((created + 1))
     fi
     continue
   fi
-  # Colour comparison is case-insensitive and '#'-insensitive: hosts normalise differently and a
-  # case difference is not drift anyone means.
-  lc() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's/^#//'; }
-  if [ "$(lc "$cur_color")" != "$(lc "$color")" ] || [ "$cur_desc" != "$desc" ]; then
+  cur_color=$(host_field "$name" color)
+  cur_desc=$(host_field "$name" description)
+  # Colour comparison ignores case and a leading '#': hosts normalise differently and that is not
+  # drift anyone means. Descriptions are compared EXACTLY, case included.
+  if [ "$(norm_color "$cur_color")" != "$(norm_color "$color")" ] || [ "$cur_desc" != "$desc" ]; then
     drifted=$((drifted + 1))
     report="${report}  drifted  $name (color '$cur_color' vs '$color'; description '$cur_desc' vs '$desc')"$'\n'
     if [ "$MODE" = sync ]; then
-      if [ "${FORGE_DRY_RUN:-0}" = 1 ]; then
+      if [ "$_dry" = 1 ]; then
         echo "[dry-run] update label '$name' on $REPO" >&2
       else
         body=$(jq -nc --arg n "$name" --arg c "$color" --arg d "$desc" \
                  '{name:$n, color:$c, description:$d}')
-        # GitHub addresses a label by NAME on update; Forgejo by ID, the same split forge-lib
-        # already hides for forge_issue_label.
         case "$(forge_host)" in
           forgejo) id=$(host_field "$name" id)
-                   [ -n "$id" ] || { echo "sync-labels: no id for '$name' on forgejo" >&2; exit 1; }
+                   [ -n "$id" ] || { echo "sync-labels: no id for '$name' on forgejo" >&2; exit 4; }
                    forge_api PATCH "/repos/$REPO/labels/$id" "$body" >/dev/null ;;
-          *)       forge_api PATCH "/repos/$REPO/labels/$name" "$body" >/dev/null ;;
-        esac || { echo "sync-labels: failed to update '$name'" >&2; exit 1; }
+          # GitHub addresses the label by NAME in the PATH, so it MUST be percent-encoded: a stock
+          # name like `help wanted` puts a raw space in the URL, and a `#` would open a fragment
+          # and silently target a different label (round-1 finding M2).
+          *)       enc=$(jq -rn --arg n "$name" '$n|@uri')
+                   forge_api PATCH "/repos/$REPO/labels/$enc" "$body" >/dev/null ;;
+        esac || { echo "sync-labels: failed to update '$name'; the host may be partially synced" >&2; exit 4; }
       fi
       updated=$((updated + 1))
     fi
   fi
 done <<< "$declared"
 
-# --- labels on the host that nobody declared: report, never touch -----------------------------
+# --- 4. labels on the host that nobody declared: report, never touch ---------------------------
 undeclared=$(printf '%s' "$existing" | jq -r '.[].name' \
-  | grep -vxF -f <(printf '%s\n' "$declared" | cut -f1) || true)
+  | grep -vxF -f <(printf '%s\n' "$declared" | cut -d"$US" -f1) || true)
 if [ -n "$undeclared" ]; then
   echo "sync-labels: on $REPO but not declared (left alone, never deleted):" >&2
   printf '%s\n' "$undeclared" | sed 's/^/  extra    /' >&2

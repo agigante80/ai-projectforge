@@ -58,19 +58,6 @@ Do NOT create these by hand. This taxonomy was declared and never imported for m
 executable inputs to the gate's lens routing, so the kit's most distinctive mechanism was
 unexercisable in the repo that ships it. A manual instruction is what allowed that.
 
-To recreate labels in a new repo manually:
-```bash
-while IFS= read -r line; do
-  name=$(echo "$line" | grep "^- name:" | sed 's/- name: //')
-  # ... parse and create
-done < .github/labels.yml
-```
-
-Or use the `gh-label` CLI tool:
-```bash
-npx github-label-sync --access-token $(gh auth token) --labels .github/labels.yml owner/repo
-```
-
 ## Adding project-specific labels
 
 Add entries to `.github/labels.yml` for your domain:
