@@ -47,7 +47,8 @@ After installing forge-kit, sync the taxonomy from `.github/labels.yml` with the
 # so keep the two together (forge-adapt copies both).
 bash sync-labels.sh                 # create every declared label, update any that drifted
 bash sync-labels.sh --check         # change nothing; exit 1 listing what is missing or drifted
-FORGE_DRY_RUN=1 bash sync-labels.sh # print what it would write, send nothing
+FORGE_DRY_RUN=1 bash sync-labels.sh # print what it would WRITE; it still READS the host, so
+                                    # it needs credentials and reports against real state
 ```
 
 It is host-aware (GitHub and Forgejo), idempotent, and **never deletes**: a label on the host that

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-labels-version: 2
+# sync-labels-version: 3
 # sync-labels.sh: make the host's labels match `.github/labels.yml`, or report that they do not.
 #
 # WHY THIS EXISTS (issue #104). forge-kit shipped a label taxonomy, documented that labels drive
@@ -76,16 +76,29 @@ REPO="${REPO_OVERRIDE:-$(forge_repo)}"
 # phantom label and the script never converges.
 US=$'\x1f'
 declared=$(awk -v US="$US" '
-  function clean(v) {
+  # SQ/DQ are built from character codes so this program contains no literal quote of either kind:
+  # it is embedded in a single-quoted shell string, and nested quoting is where the first attempt
+  # at this function went wrong.
+  BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34) }
+  function clean(v,   i, n, ch, out) {
     sub(/\r$/, "", v)
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
-    # A quoted value ends at its CLOSING quote; anything after it (a ` # comment`) is discarded.
-    # Checking for a quoted value BEFORE stripping comments is what matters: a `#` inside quotes is
-    # data, and stripping first would corrupt it.
-    if (v ~ /^"/)  { sub(/^"/, "", v);  if (v ~ /"/) sub(/"[^"]*$/, "", v);  return v }
-    if (v ~ /^'"'"'/) {
-      sub(/^'"'"'/, "", v); if (v ~ /'"'"'/) sub(/'"'"'[^'"'"']*$/, "", v)
-      gsub(/'"'"''"'"'/, "'"'"'", v); return v
+    # A quoted value ends at its CLOSING quote, found from the LEFT; anything after it (a
+    # ` # comment`) is discarded. index/substr rather than sub(): POSIX awk has no capture-group
+    # backreference in a replacement, so a /^([^"]*)".*$/ form silently inserts a literal \1.
+    if (substr(v, 1, 1) == DQ) {
+      v = substr(v, 2); i = index(v, DQ); if (i > 0) v = substr(v, 1, i - 1); return v
+    }
+    if (substr(v, 1, 1) == SQ) {
+      # YAML doubles a single quote to escape it, so the closing quote is the first SQ NOT
+      # followed by another. A plain index() would truncate "isn(SQ)(SQ)t" at the escape.
+      v = substr(v, 2); out = ""; n = length(v)
+      for (i = 1; i <= n; i++) {
+        ch = substr(v, i, 1)
+        if (ch == SQ) { if (substr(v, i + 1, 1) == SQ) { out = out SQ; i++ } else break }
+        else out = out ch
+      }
+      return out
     }
     sub(/[[:space:]]+#.*$/, "", v)
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
@@ -96,7 +109,8 @@ declared=$(awk -v US="$US" '
     if (seen) print n US c US d
     v = $0; sub(/^-[[:space:]]+name:/, "", v); n = clean(v); c = ""; d = ""; seen = 1; next
   }
-  /^[[:space:]]+color:/       { v = $0; sub(/^[[:space:]]+color:/, "", v);       c = clean(v); next }
+  /^[[:space:]]+color:/       { v = $0; sub(/^[[:space:]]+color:/, "", v); c = clean(v)
+                                sub(/^#/, "", c); next }
   /^[[:space:]]+description:/ { v = $0; sub(/^[[:space:]]+description:/, "", v); d = clean(v); next }
   { print "sync-labels: unparsable line " NR ": " $0 > "/dev/stderr"; bad = 1 }
   END { if (seen) print n US c US d; if (bad) exit 3 }
@@ -111,10 +125,15 @@ declared=$(awk -v US="$US" '
 # discovered after the entries above it have already been created on the host.
 errs=0
 while IFS="$US" read -r name color desc; do
-  [ -n "$name$color$desc" ] || continue
   if [ -z "$name" ]; then
+    # Covers a bare `- name:` with no other fields too: skipping empty records here is what let
+    # M1's own case through the first time.
     echo "sync-labels: an entry has an empty name" >&2; errs=$((errs + 1)); continue
   fi
+  case "$name" in
+    .|..|...*) echo "sync-labels: '$name' is a dot-only name; refused because it can escape a URL path segment" >&2
+               errs=$((errs + 1)) ;;
+  esac
   case "$color" in
     [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;;
     "") echo "sync-labels: '$name' has no color (both hosts require one)" >&2; errs=$((errs + 1)) ;;
