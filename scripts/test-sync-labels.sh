@@ -254,6 +254,53 @@ exit_case "a leading-dot name like .github is not refused" \
 exit_case "a bare .. is still refused" \
   '- name: ..\n  color: "ffffff"\n  description: X\n' 3 0
 
+# --- 8g. the three silent acceptances from issue #122 ------------------------------------------
+# Each of these was accepted with exit 0 and a plausible-looking write. The script's own principle
+# is that a recognised line with a malformed VALUE must refuse like an unrecognised line SHAPE.
+exit_case "an unterminated double-quoted value refuses" \
+  '- name: bug\n  color: "d73a4a"\n  description: "unterminated\n' 3 0
+exit_case "an unterminated single-quoted value refuses" \
+  "- name: bug\n  color: 'd73a4a'\n  description: 'unterminated\n" 3 0
+exit_case "a duplicate declared name refuses before any write" \
+  '- name: bug\n  color: "d73a4a"\n  description: X\n- name: bug\n  color: "ffffff"\n  description: Y\n' 3 0
+# ...and the boundary: a correctly terminated quote containing an ESCAPED quote still works.
+clean_case "an escaped quote is not mistaken for an unterminated value" \
+  '- name: bug\n  color: "d73a4a"\n  description: "the \\"x\\" label"\n' \
+  '{"name":"bug","color":"d73a4a","description":"the \"x\" label"}'
+
+out=$(cd "$T" && bash ./sync-labels.sh --labels "" 2>&1); rc=$?
+[ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'empty value' \
+  && ok "an empty --labels value is a usage error, not silent auto-discovery" \
+  || bad "empty --labels value exits 2 (rc=$rc: $out)"
+out=$(cd "$T" && HOST_LABELS="$T/host.json" bash ./sync-labels.sh --labels "$T/labels.yml" --repo "" 2>&1); rc=$?
+[ "$rc" -eq 2 ] && ok "an empty --repo value is a usage error" || bad "empty --repo value exits 2 (rc=$rc)"
+
+# --- 8h. one jq pass, not one per label field (issue #121) --------------------------------------
+# host_field used to spawn jq 3 or 4 times per declared label. The lookup must be built once, and
+# behaviour must be identical: absent yields empty, a null description yields the empty string.
+mkdir -p "$T/bin"
+printf '#!/bin/sh\necho x >> "$JQLOG"\nexec %s "$@"\n' "$(command -v jq)" > "$T/bin/jq"; chmod +x "$T/bin/jq"
+python3 -c "
+import json
+labels=[{'id':i,'name':'l%02d'%i,'color':'aabbcc','description':'d%d'%i} for i in range(20)]
+open('$T/host.json','w').write(json.dumps(labels))
+open('$T/labels.many.yml','w').write(''.join('- name: l%02d\n  color: \"aabbcc\"\n  description: d%d\n\n'%(i,i) for i in range(20)))"
+: > "$T/jq.log"; REQLOG="$T/req.log"; : > "$REQLOG"
+out=$(cd "$T" && PATH="$T/bin:$PATH" JQLOG="$T/jq.log" HOST_LABELS="$T/host.json" REQLOG="$REQLOG" \
+      bash ./sync-labels.sh --labels "$T/labels.many.yml" --check 2>&1); rc=$?
+n=$(wc -l < "$T/jq.log" | tr -d ' ')
+[ "$rc" -eq 0 ] && ok "20 in-sync labels report clean" || bad "20 in-sync labels report clean (rc=$rc: $out)"
+[ "$n" -le 5 ] && ok "jq runs a FIXED number of times, not per label ($n for 20 labels)" \
+  || bad "jq is not per-label (ran $n times for 20 labels)"
+# A null description on the host must still compare equal to an empty declared description.
+host_json '[{"id":1,"name":"bare","color":"aabbcc","description":null}]'
+printf -- '- name: bare\n  color: "aabbcc"\n  description:\n' > "$T/labels.null.yml"
+REQLOG="$T/req.log"; : > "$REQLOG"
+out=$(cd "$T" && HOST_LABELS="$T/host.json" REQLOG="$REQLOG" bash ./sync-labels.sh --labels "$T/labels.null.yml" --check 2>&1); rc=$?
+[ "$rc" -eq 0 ] && [ ! -s "$REQLOG" ] \
+  && ok "a null host description equals an empty declared one (no phantom drift)" \
+  || bad "null description handling (rc=$rc: $out)"
+
 # --- 8e. the four exit codes are DISTINGUISHABLE ------------------------------------------------
 # Every assertion above used -ne 0, so all four codes were interchangeable to the suite and three
 # separate exit-code mutations survived.

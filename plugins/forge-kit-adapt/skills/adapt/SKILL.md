@@ -13,7 +13,7 @@ description: >
   Backward-compatible: also triggered by "upgrade-audit".
 ---
 
-<!-- forge-adapt-version: 49 -->
+<!-- forge-adapt-version: 50 -->
 
 # forge-adapt
 
@@ -356,7 +356,7 @@ Setup signals suggest it wants them.)
 
 Reply:
 - names to install (I adapt each to your stack), "all", or "none"
-- "templates" - install/upgrade the issue-template set inline (adapted to your packages) plus the optional lockstep guard + ticket-standards doc. No separate command needed.
+- "templates" - install/upgrade the issue-template set inline (adapted to your packages), the optional lockstep guard + ticket-standards doc, and the label taxonomy.
 - "refresh <name>" - deep-compare one installed component and merge genuine improvements
 - "refresh" - full drift report (writes nothing)
 - "more subagents" / "more skills" / "more commands" / "more hooks" - full catalogue for a category, as a table
@@ -545,9 +545,8 @@ adapt the `areas`/dropdown OPTIONS to this project's real package structure; wri
 also reads `.gitea/ISSUE_TEMPLATE/`); if the project's existing templates sit in a legacy lowercase
 dir (`.forgejo/issue_template/`, written by forge-adapt v34 and earlier), `git mv` that dir to the
 uppercase path FIRST and write there, never leave both casings behind (issue #61); exclude
-`contribution.yml`. Then, since the project now has
-versioned templates, offer the repo-level governance (the `check-template-lockstep.sh` guard +
-canonical `ticket-standards.md`) exactly as the Templates mode does. Confirm:
+`contribution.yml`. Then offer the repo-level governance
+per the rule below. Confirm:
 `✓ issue templates installed at v<N> (<dir>)` and, if taken, `✓ template-lockstep guard + ticket-standards doc`.
 
 **Finish** with a short summary and next steps:
@@ -806,6 +805,7 @@ Confirm: `✓ ticket-standards doc written at v$PRJ_TPL_VER; gate + CLAUDE.md re
   never a failure. A block that exits non-zero surfaces as "Failed to run" and alarms the user. Use
   `shopt -s nullglob` for catalogue globs and end multi-command probes with a trailing `true`.
 - **Template governance is repo-level and opt-in.** Offer the lockstep guard + canonical doc only
-  when the project has versioned issue templates. The guard and its test are copied verbatim
+  when the project has versioned issue templates. Offer the label taxonomy too, on ANY host; see
+  `references/skills.md` for what to copy and why. The guard and its test are copied verbatim
   (host-agnostic); the canonical doc is adapted with its `template-version` marker set to the
   PROJECT's template version, and an existing project doc is refreshed report-first, never clobbered.

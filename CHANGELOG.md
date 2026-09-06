@@ -48,6 +48,11 @@ tracks the repository, so users are already served from the default branch.
   bump). Precedence now enumerates the REAL restatement set (it wrongly claimed the hard-fail
   bars were the only one) and distinguishes a stricter gate restatement, which is advisory and
   reported as a doc gap rather than blocking, so a gate copy cannot silently out-rule the doc.
+- **sync-labels hardening and reach** (#120, #121, #122). It now refuses an unterminated quoted
+  value, a duplicate declared name and an empty flag value rather than accepting each silently;
+  it builds the host lookup in ONE jq pass instead of three or four per label (62 processes to 3
+  for 20 labels); and `forge-adapt` offers the label taxonomy through its `templates` path on any
+  host, so a GitHub-only project no longer has to install forge-host to get the applier.
 - **`ticket-standards.md` carries two version markers instead of one overloaded integer** (#94,
   question 2). `template-version` says which FORM the doc describes and stays locked to the five
   work templates; the new `doc-rules-version` says which revision the RULES TEXT is at and moves
