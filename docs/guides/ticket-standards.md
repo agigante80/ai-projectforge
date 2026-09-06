@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 6 -->
+<!-- doc-rules-version: 7 -->
 
 # Ticket standards (canonical)
 
@@ -143,6 +143,11 @@ restatement not listed here is a fork and a bug:
    they existed only in the gate, so the list did not need them.
 5. Rule 3's emulator clause, which the critic's brief restates near-verbatim. Item 1 covers rule
    3's UI E2E hard-fail bar, which is a different clause of the same rule.
+6. The Step 0c-iii synthesis table, whose rows restate the SHAPE required by rules 2, 3, 4 and 7,
+   because the synthesis sub-agent has to be told what to write. Item 3 covers rule 1's appearance
+   in that same table; these are the other four.
+7. Step 3A check 5, which restates rule 2's concrete-spec bar as a mechanical check, down to
+   rejecting a bare "add unit tests".
 
 Editing rule 5 or rule 1 therefore means editing the gate in the same change. The list used to
 claim the hard-fail bars were the *only* exception, which was false, so a maintainer editing rule 5

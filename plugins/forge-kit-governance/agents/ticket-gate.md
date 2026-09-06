@@ -29,7 +29,7 @@ color: red
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 29 -->
+<!-- ticket-gate-version: 30 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -127,7 +127,8 @@ For each template section `id`, classify the corresponding content in the issue 
 Target sections for synthesis (always check these):
 - `scenarios`, `unit_tests`, `e2e_tests`, `docs_impact`, `personal_data`
   (what each derives from is the 0c-iii rules table below, stated once; `personal_data` is rule
-  4's seven facts, and on a pre-v6 ticket lives under a heading containing GDPR, in any case)
+  4's seven facts, and on a pre-v6 ticket lives under a heading containing GDPR, matched
+  case-insensitively)
 
 **0c-iii. Synthesise real content**
 
@@ -380,8 +381,9 @@ additional context alongside the issue body and project files.
 Run these as literal checks against the issue body and the template. Checks 1, 2 and 3
 are phrased so a future script can adopt them verbatim; checks 4, 5 and 6 each split into a
 mechanical half stated here (block counts, One-When, a digit-or-quoted error, a named
-test file path, section presence) and a semantic half (WHICH conditions are independent, whether a "none" reason
-holds) that belongs to the critic. Outcomes are: **pass**, **fail**, **warn** (check 1
+test file path, section presence) and a semantic half (WHICH conditions are independent, whether an
+N/A is legitimate under the derived-scope rule, whether a "none" reason holds) that
+belongs to the critic. Outcomes are: **pass**, **fail**, **warn** (check 1
 newer-marker, check 2 missing type label), **N/A** (check scoped out), or **referred**
 (the critic resolves it, e.g. check 4's specific-error heuristic miss). Every outcome
 quotes its evidence line. **Every FAIL becomes a blocking item, classified significant**
@@ -617,7 +619,7 @@ enters auto-remediation and never prints NEEDS-WORK.
 **If the verdict is NEEDS-WORK (blocking non-empty):**
 
 The blocking items arrive pre-classified by the judging agents' `class` fields (critic and lens
-alike). **Fundamental** is defined in Step 3B, where the class is assigned; here it means the
+alike). **Fundamental** is defined in Step 3B, where the classification rule lives; here that means the
 architecture alternatives were already generated at Step 4 and posted with the review, and
 auto-remediation copies them into the issue body. **Significant**: the approach stands but
 blocking gaps exist.

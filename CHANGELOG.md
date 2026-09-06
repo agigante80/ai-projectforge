@@ -25,7 +25,7 @@ tracks the repository, so users are already served from the default branch.
   `full-review`) to a **ratchet**: they may shrink freely and may not grow. Word counts are a
   column in the generated index. A test fails if CLAUDE.md's documented numbers and the script's
   enforced numbers disagree. Framed as a smell detector, not a quality metric.
-- **`ticket-gate.md` deduplicated where it genuinely repeated** (#109, partial): 5715 to 5672
+- **`ticket-gate.md` deduplicated where it genuinely repeated** (#109, partial): 5715 to 5680
   words. The `references/` split it also proposes stays blocked and now has its prerequisite
   ticketed as #124. The canonical doc's enumerated restatement set gained the two entries it
   was missing, so it no longer certifies as drift-free a place where the gate restates it.
