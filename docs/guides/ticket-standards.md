@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 4 -->
+<!-- doc-rules-version: 5 -->
 
 # Ticket standards (canonical)
 
@@ -137,6 +137,10 @@ restatement not listed here is a fork and a bug:
 2. The security lens checklist, which restates rule 5 point for point.
 3. Rule 1's GWT quality bar, which appears twice: in the Step 0c synthesis table and in Step 3A
    check 4.
+4. Rule 2's integration and regression coverage, and rule 8's implementation concreteness (build
+   and test commands, dependency justification, N+1 and scalability), which the critic's brief
+   carries as blocking-capable concerns. These joined the doc in #101; before that they existed
+   only in the gate, so the list did not need them.
 
 Editing rule 5 or rule 1 therefore means editing the gate in the same change. The list used to
 claim the hard-fail bars were the *only* exception, which was false, so a maintainer editing rule 5
