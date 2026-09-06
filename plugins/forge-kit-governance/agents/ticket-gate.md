@@ -29,7 +29,7 @@ color: red
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 25 -->
+<!-- ticket-gate-version: 26 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -130,7 +130,7 @@ Target sections for synthesis (always check these):
 - `unit_tests` (specific file/input/expected-output test cases)
 - `e2e_tests` (specific test suite/setup/assertion cases)
 - `docs_impact` (documentation currency: affected docs incl. the root README, or "none" with a reason)
-- `personal_data` (rule 4's seven facts; on a pre-v6 ticket recover them from its old `GDPR compliance` heading)
+- `personal_data` (rule 4's seven facts; on a pre-v6 ticket recover from any heading matching /GDPR/)
 
 **0c-iii. Synthesise real content**
 
@@ -151,6 +151,7 @@ Synthesis rules per section:
 | `unit_tests` | Acceptance criteria + referenced files -> specific test file path, concrete input value, expected output or error code. |
 | `e2e_tests` | UI-visible behaviour -> specific test suite file, setup steps, action, assertion. Mark N/A with justification for API-only tickets. |
 | `docs_impact` | The ticket's own file list -> the docs and README sections it plausibly touches, or "none" with the reason derived from the change surface. |
+| `personal_data` | The ticket's file list -> the seven facts. NEVER invent a legal basis. |
 | Thin sections | Preserve existing text verbatim, append what the current template version now requires. |
 
 The sub-agent must produce a structured document with one heading per synthesised section.
@@ -176,8 +177,7 @@ Template auto-upgraded to v<CURRENT_TPL_VER> - content synthesised
 Issue was filed against template v<old> (current: v<CURRENT_TPL_VER>).
 The following sections were synthesised from the existing issue content:
 
-- <section id>: <what was synthesised for it, per the 0c-iii rules; or N/A - <reason>>
-  (one line per section; a new section needs no edit here)
+- <section id>: <what was synthesised for it, or N/A - <reason>>
 
 Enriched existing sections: <list or "none">
 
