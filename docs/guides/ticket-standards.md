@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 5 -->
+<!-- doc-rules-version: 6 -->
 
 # Ticket standards (canonical)
 
@@ -139,8 +139,10 @@ restatement not listed here is a fork and a bug:
    check 4.
 4. Rule 2's integration and regression coverage, and rule 8's implementation concreteness (build
    and test commands, dependency justification, N+1 and scalability), which the critic's brief
-   carries as blocking-capable concerns. These joined the doc in #101; before that they existed
-   only in the gate, so the list did not need them.
+   carries as blocking-capable concerns. These joined this doc in #117 (issue #94); before that
+   they existed only in the gate, so the list did not need them.
+5. Rule 3's emulator clause, which the critic's brief restates near-verbatim. Item 1 covers rule
+   3's UI E2E hard-fail bar, which is a different clause of the same rule.
 
 Editing rule 5 or rule 1 therefore means editing the gate in the same change. The list used to
 claim the hard-fail bars were the *only* exception, which was false, so a maintainer editing rule 5
