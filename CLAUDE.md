@@ -16,7 +16,7 @@ install time.
 A root `AGENTS.md` exists as a thin pointer to this file for non-Claude agents (the open
 cross-agent instruction format); keep it a pointer, never duplicate content into it.
 
-**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, five contract test suites, and (on `pull_request` only) the two range guards, plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Three of those five suites cover shipped executables (hooks, the catalogue script, `forge-lib.sh`); the other two cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`), and both of those run unconditionally even though one of the guards they cover is PR-only.
+**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, six contract test suites, the component-index freshness check, and (on `pull_request` only) the two range guards, plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Four of those six suites cover shipped executables (hooks, the catalogue script, `forge-lib.sh`, the component-index generator); the other two cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`), and both of those run unconditionally even though one of the guards they cover is PR-only.
 
 **Validation approach:** There is no application test runner. Two kinds of validation exist:
 
@@ -29,6 +29,8 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
    bash scripts/test-template-lockstep.sh      # contract test for the lockstep guard above
    bash scripts/test-forge-adapt-catalogue.sh  # contract test for the forge-adapt catalogue script
    bash scripts/test-forge-lib.sh              # contract test for the forge-host adapter (stubbed transport)
+   bash scripts/test-update-component-index.sh # contract test for the component-index generator
+   python3 scripts/update-component-index.py --check  # fail if the generated inventory regions are stale
    python3 scripts/test-closing-sessions-memory.py  # contract test for the closing-sessions memory.py helper (NOT yet wired into CI)
    git fetch origin main                       # required: the next script fails closed on a missing base ref
    bash scripts/check-version-bump.sh origin/main   # fail if a changed component didn't bump its <name>-version marker
@@ -45,24 +47,31 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
 
    - **Hooks** (`scripts/test-hooks.py`): JSON payload on stdin, a `permissionDecision` on stdout, always exit 0. The test covers every matched tool, fail-open on unparseable input, deny-signalled-on-stdout-not-exit-code, and a regression guard for the foreign-cwd wiring bugs. It runs in CI. When you change a hook, extend it: three consecutive PRs shipped hook defects before this existed.
    - **`closing-sessions/scripts/memory.py`** (`scripts/test-closing-sessions-memory.py`, 12 tests): the one skill that ships an executable rather than only prose, so the `forge-kit-governance` plugin has a second testable surface. Its own history is the argument for the test (`anchor index matching and escape memory fields`, `treat index-line replacement as literal, not regex`). **This test is not in `.github/workflows/validate.yml`,** so nothing enforces it on a PR. Worse, `memory.py` lives in a `scripts/` subdirectory, which no marker guard globs (see the enforced path set below), so it carries no `<name>-version: N` marker either. It is the one shipped executable with **zero** automatic enforcement: no CI test, no marker bump, no drift signal for `forge-adapt`. Run the test by hand when you touch it, and prefer wiring it into CI over remembering to.
-   - **`scripts/forge-adapt-catalogue.sh`** (`scripts/test-forge-adapt-catalogue.sh`, in CI): the S3 component catalogue the `forge-adapt` skill runs verbatim instead of paraphrasing an inline block (an LLM executor kept reintroducing fixed bugs). Contract: prints `<type>: <name> | v<N>` rows where a skill's name is its *directory* name (every skill file is `SKILL.md`), resolves each version by marker name and then by the first-marker-wins fallback (see the marker-parsing note under Key Conventions), never prints `vnone`, and always exits 0 so a group with no hooks or agents never reads as a failure. Also lists versioned shell assets as `asset:` rows.
+   - **`scripts/forge-adapt-catalogue.sh`** (`scripts/test-forge-adapt-catalogue.sh`, in CI): the S3 component catalogue the `forge-adapt` skill runs verbatim instead of paraphrasing an inline block (an LLM executor kept reintroducing fixed bugs). Contract: prints `<type>: <name> | v<N>` rows where a skill's name is its *directory* name (every skill file is `SKILL.md`), resolves each version by marker name and then by the first-marker-wins fallback (see the marker-parsing note under Key Conventions), never prints `vnone`, and always exits 0 so a group with no hooks or agents never reads as a failure. Also lists versioned shell assets as `asset:` rows. A `--tsv` mode adds the file path for machine consumers (`update-component-index.py`); the default output is a contract forge-adapt reads, so it is byte-stable and must stay that way.
+   - **`scripts/update-component-index.py`** (`scripts/test-update-component-index.sh`, in CI): renders the component inventory into marker-delimited regions in `README.md` (`component-index`) and `CLAUDE.md` (`plugin-groups`) from the catalogue's `--tsv` output, and `--check` fails a build whose regions have gone stale. **Do not hand-edit inside those markers**; run the script. It is Python rather than bash because it is marker rewriting and diffing rather than globbing, and it shells out to the catalogue rather than re-walking the tree, so "what counts as a component" keeps one definition.
    - **`forge-host/assets/forge-lib.sh`** (`scripts/test-forge-lib.sh`, in CI): the host adapter, driven with a stubbed `forge_api` standing in for the network layer. Covers Forgejo pagination (termination on an EMPTY page, deliberately not `length < limit`, because the server clamps `limit` to `MAX_RESPONSE_ITEMS`), multi-page label resolution, atomic refusal of unresolvable label names, the zero-label message, and dry-run sending nothing.
 
    Two shipped shell assets still have no tests: `release-automation/assets/version-lib.sh` and `release-run.sh`. Treat a change to either as the same class of risk as the tested executables, since a version primitive is exactly where a silent bug is expensive. All three shell assets carry hook-style `# <name>-version: N` markers, enforced by the same three enforcement points as every other component.
 
 ## Architecture
 
-The kit is organized into plugin groups under `plugins/<group>/`:
+The kit is organized into plugin groups under `plugins/<group>/`. This table is generated from the
+tree by `scripts/update-component-index.py`; CI fails if it goes stale, so do not hand-edit it. The
+Version column is the group's `plugin.json` semver (the unit of install), not a component marker.
 
-| Plugin group | Contents |
-|---|---|
-| `forge-kit-adapt` | forge-adapt skill (the entry point: install this first) |
-| `forge-kit-governance` | ticket-gate agent; gate-ticket command; closing-sessions, working-overnight skills; block-dashes, overnight-guard, overnight-continue hooks |
-| `forge-kit-review` | code-reviewer, architect-review, backend-architect, code-simplifier, coding-standards-auditor agents; full-review, pr-enhance commands |
-| `forge-kit-security` | security-auditor, backend-security-coder, api-security-tester agents; owasp-api-security skill |
-| `forge-kit-testing` | tdd-orchestrator, test-automator, performance-engineer agents; mutation-sweep skill |
-| `forge-kit-devops` | dep-auditor, health-check agents; ci-health command; find-dead-code, release, release-automation, forge-host, github-to-forgejo skills; block-legacy-host-push hook |
-| `forge-kit-backend` | api-design-principles, architecture-patterns, microservices-patterns, cqrs-implementation, saga-orchestration skills |
+<!-- plugin-groups:start -->
+<!-- Generated by scripts/update-component-index.py from the plugins/ tree. Do not hand-edit: run the script. CI fails on a stale region. -->
+
+| Plugin group | Version | Contents |
+|---|---|---|
+| `forge-kit-adapt` | 0.3.4 | skill: adapt |
+| `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
+| `forge-kit-devops` | 0.6.6 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, version-lib |
+| `forge-kit-governance` | 0.7.11 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard |
+| `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
+| `forge-kit-security` | 0.2.2 | agents: api-security-tester, backend-security-coder, security-auditor; skill: owasp-api-security |
+| `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
+<!-- plugin-groups:end -->
 
 Users install via the plugin marketplace (`/plugin marketplace add agigante80/forge-kit`) or by cloning the repo and running `forge-adapt` from within the target project.
 
