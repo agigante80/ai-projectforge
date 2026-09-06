@@ -29,7 +29,7 @@ color: red
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 24 -->
+<!-- ticket-gate-version: 25 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -130,6 +130,7 @@ Target sections for synthesis (always check these):
 - `unit_tests` (specific file/input/expected-output test cases)
 - `e2e_tests` (specific test suite/setup/assertion cases)
 - `docs_impact` (documentation currency: affected docs incl. the root README, or "none" with a reason)
+- `personal_data` (rule 4's seven facts; on a pre-v6 ticket recover them from its old `GDPR compliance` heading)
 
 **0c-iii. Synthesise real content**
 
@@ -175,10 +176,8 @@ Template auto-upgraded to v<CURRENT_TPL_VER> - content synthesised
 Issue was filed against template v<old> (current: v<CURRENT_TPL_VER>).
 The following sections were synthesised from the existing issue content:
 
-- Test scenarios (GWT): <N> conditions, <N x 2> scenarios
-- Unit tests: <N> specific cases with file / input / expected output
-- E2E tests: <N> specific cases with suite file / setup / assertion (or N/A - <reason>)
-- Documentation impact: <affected docs / README sections, or N/A - <reason>>
+- <section id>: <what was synthesised for it, per the 0c-iii rules; or N/A - <reason>>
+  (one line per section; a new section needs no edit here)
 
 Enriched existing sections: <list or "none">
 
@@ -279,7 +278,7 @@ justified, which label routing decides:
 |---|---|---|
 | Security specialist | label `security` OR `critical` | runs the Security lens (definition below) in addition to the critic; findings merge into the same review comment |
 | API-design brief | label `api` OR body matches `GET /\|POST /\|PUT /\|DELETE /\|routes/` | no extra agent: the critic's brief gains the API-design checklist (REST conventions, error-code consistency, contract clarity, could a client dev implement from the spec alone) |
-| Privacy regime | label `privacy` | no extra agent: the critic's brief gains the project's installed `privacy-regime` skill, which names its own regime. Without it, rule 4's seven neutral facts are the bar |
+| Privacy regime | label `privacy` | no extra agent: Read `.claude/skills/privacy-regime/SKILL.md` and append its filled-in obligations to the critic's brief. Absent or unfilled, skip the row: rule 4 still binds |
 | `critical` | label `critical` | maximum scrutiny: the critic treats every brief section as blocking-capable and the security lens always runs |
 
 **Never a committee.** The review set is one critic plus label-triggered lenses. Removed by
@@ -447,9 +446,9 @@ the 2026-08-27 backlog reviews this design was validated on):
      401; invalid-token 401; wrong-user 403; rate-limit enforcement; IDOR (user A cannot
      reach user B's resources). Any missing case is blocking.
    - **Personal-data judgment (rule 4):** the critic OWNS this. Where personal data is touched (names, emails, phones, GPS, IPs,
-     identifiers in logs count), seven facts are required: storage location and encryption
-     at rest, erasure with cascading deletion, portability, minimisation and retention,
-     legal basis, cross-border transfer. **Name no jurisdiction.** An "N/A - no personal
+     identifiers in logs count), seven facts are required: (1) the fields themselves, (2)
+     storage location and encryption at rest, (3) erasure with cascading deletion, (4)
+     portability, (5) minimisation and retention, (6) legal basis, (7) cross-border transfer. **Name no jurisdiction.** An "N/A - no personal
      data" claim is judged against the ticket's own file list like any other N/A.
    The remaining concerns, one per bullet (all blocking-capable except where tagged):
    - architecture fit and existing-pattern conflicts, including N+1 and scalability risks

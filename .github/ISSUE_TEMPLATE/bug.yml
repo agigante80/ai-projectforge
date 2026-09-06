@@ -69,10 +69,15 @@ body:
     id: personal_data
     attributes:
       label: Personal data handling
-      description: Does this bug expose, leak, or mishandle PII?
+      description: Does this bug expose, leak or mishandle personal data? If so, state all seven facts; otherwise mark N/A with the reason.
       value: |
-        - **Does this bug expose PII?** yes / no
-        - **Details:**
+        - **Personal-data fields affected:**
+        - **Storage location and encryption at rest:**
+        - **Erasure, including cascading deletion:**
+        - **Portability (export on request):**
+        - **Minimisation and retention:**
+        - **Legal basis:**
+        - **Cross-border transfer:**
     validations:
       required: true
 

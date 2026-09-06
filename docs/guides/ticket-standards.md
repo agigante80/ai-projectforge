@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 3 -->
+<!-- doc-rules-version: 4 -->
 
 # Ticket standards (canonical)
 
@@ -78,9 +78,10 @@ emulator scenario it adds or extends, or states why the standing suite already c
 
 ### 4. Personal data handling
 
-Identify every personal-data field the ticket touches (name, email, phone, GPS, IP), then state
-seven facts about it: storage location and encryption at rest; erasure, including cascading
-deletion of dependent records; portability; minimisation and retention; the legal basis; and any
+State seven facts, numbered here because the templates, the gate and the `privacy-regime` skill
+all count them the same way: (1) every personal-data field the ticket touches (name, email, phone,
+GPS, IP); (2) storage location and encryption at rest; (3) erasure, including cascading deletion of
+dependent records; (4) portability; (5) minimisation and retention; (6) the legal basis; (7) any
 cross-border transfer. A ticket that touches no personal data marks this N/A with that reason.
 
 **This rule names no jurisdiction on purpose.** Those seven facts exist under GDPR, UK GDPR, CCPA

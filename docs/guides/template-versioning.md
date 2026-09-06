@@ -22,8 +22,11 @@ article-numbered prompts with seven regime-agnostic facts (issue #101). forge-ki
 jurisdiction in any default: for most projects a named regime is the WRONG one, and a gate citing
 the wrong statute is worse than one citing none, because it looks authoritative. Projects under a
 specific regime install the opt-in `privacy-regime` skill, which names their own. The field `id`
-changed from `gdpr` to `personal_data`; the gate's Step 0c synthesis table never referenced it, so
-only the templates and `dep-auditor`'s stamped heading moved.
+changed from `gdpr` to `personal_data`. The gate's Step 0c synthesis RULES TABLE never referenced it,
+but 0c-ii classifies every current section `id` against the issue body and Step 3A check 3 requires a
+heading for each, so a pre-v6 ticket would classify the renamed section as Missing. 0c's always-check
+list therefore gained `personal_data` with an instruction to recover it from the old
+`GDPR compliance` heading first. `dep-auditor`'s stamped heading moved too.
 
 v5 added the ticket-standard improvements approved 2026-07-16 (see
 `docs/superpowers/specs/2026-07-16-ticket-standard-improvements-design.md`): a required
