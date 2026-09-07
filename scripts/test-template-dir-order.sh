@@ -3,7 +3,7 @@
 #
 # THE DEFECT. The template-directory resolution order is a five-entry, HOST-grouped list that five
 # separate sites must agree on: check-template-lockstep.sh twice (its header comment and
-# resolve_dir), ticket-gate.md, and adapt/SKILL.md twice. The #61/#74 review found the copies had
+# resolve_dir), ticket-gate.md, dep-auditor.md, and adapt/SKILL.md twice. The #61/#74 review found the copies had
 # already diverged, case-grouped against host-grouped, before that PR merged, and only a review
 # finding re-aligned them. Two of the sites are prose an LLM executor will paraphrase.
 #
@@ -46,7 +46,9 @@ mk "$T/reordered/b.md" <<'M'
 TPL_DIR=$(for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE .forgejo/issue_template .gitea/issue_template; do :; done)
 M
 out=$(bash "$SCRIPT" "$T/reordered" 2>&1); rc=$?
-[ "$rc" -ne 0 ] && ok "a case-grouped copy fails against the host-grouped canon" || bad "reordered copy fails"
+# EXACTLY 1. "Non-zero" would accept exit 2, the unreadable-root status, so a fixture path typo
+# would read as a passing divergence test.
+[ "$rc" -eq 1 ] && ok "a case-grouped copy fails against the host-grouped canon" || bad "reordered copy exits 1 (got $rc)"
 case "$out" in *b.md*) ok "and it names the disagreeing file" ;;
                *) bad "names the file (got: $out)" ;; esac
 
@@ -58,7 +60,7 @@ mk "$T/dropped/b.md" <<'M'
 TPL_DIR=$(for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .gitea/issue_template .github/ISSUE_TEMPLATE; do :; done)
 M
 bash "$SCRIPT" "$T/dropped" >/dev/null 2>&1
-[ $? -ne 0 ] && ok "dropping a legacy lowercase entry fails" || bad "dropped entry fails"
+[ $? -eq 1 ] && ok "dropping a legacy lowercase entry fails" || bad "dropped entry fails"
 
 # The DOCUMENTED limit, pinned rather than left to be rediscovered: a site cut below the
 # four-token threshold stops looking like an ordering and drops out of the comparison entirely.
@@ -102,8 +104,48 @@ mk "$T/none/a.md" <<'M'
 nothing relevant here
 M
 bash "$SCRIPT" "$T/none" >/dev/null 2>&1
-[ $? -ne 0 ] && ok "a tree with no ordering at all fails rather than passing vacuously" \
+[ $? -eq 1 ] && ok "a tree with no ordering at all fails rather than passing vacuously" \
   || bad "no-ordering tree fails"
+
+# --- round 1: agreement is NOT enough; the canonical order itself must be pinned -----------------
+# The guard originally compared the copies to each other only, so a sweep reordering EVERY site to
+# case-grouped passed with CI green, reintroducing the exact #61 defect while the error message
+# claimed a canon nothing enforced.
+mk "$T/allwrong/a.sh" <<'M'
+  for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE .forgejo/issue_template .gitea/issue_template; do :; done
+M
+mk "$T/allwrong/b.md" <<'M'
+TPL_DIR=$(for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE .forgejo/issue_template .gitea/issue_template; do :; done)
+M
+out=$(bash "$SCRIPT" "$T/allwrong" 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "sites that AGREE on the wrong order still fail" \
+  || bad "a uniform case-grouped sweep is caught (rc=$rc)"
+case "$out" in *"Host-grouped is canonical"*) ok "and it says which order is canonical" ;;
+               *) bad "names the canonical order (got: $out)" ;; esac
+
+# --- round 1: two back-to-back copies are two sites, not one ten-entry site ---------------------
+# The copies must be separated by PUNCTUATION ONLY to reproduce the merge: two `for` loops have
+# the words "do" and "done" between them, which already stops the run.
+mk "$T/backtoback/a.sh" <<M
+# $CANON
+# $CANON
+M
+bash "$SCRIPT" "$T/backtoback" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "adjacent identical copies read as two sites, not one merged run" \
+  || bad "back-to-back copies do not merge"
+
+# --- round 1: a shipped component named test-* is not a fixture ---------------------------------
+# The skip was filename-based, so plugins/forge-kit-testing/agents/test-automator.md was excluded
+# from the scan entirely. Only this directory's own contract tests are fixtures.
+mk "$T/named/a.sh" <<M
+  for d in $CANON; do :; done
+M
+mk "$T/named/plugins/g/agents/test-automator.md" <<'M'
+TPL_DIR=$(for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE .forgejo/issue_template .gitea/issue_template; do :; done)
+M
+bash "$SCRIPT" "$T/named" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "a component whose name starts with test- is still scanned" \
+  || bad "test-named components are scanned"
 
 # --- fail closed on a missing root ---------------------------------------------------------------
 bash "$SCRIPT" "$T/does-not-exist" >/dev/null 2>&1
@@ -115,8 +157,9 @@ out=$(bash "$SCRIPT" 2>&1); rc=$?
 # EXACTLY six, which pins the count as well as the agreement. Without this, a site edited down to
 # three entries would simply drop out of the comparison and the guard would report agreement among
 # the survivors. The ticket said four; the guard found dep-auditor.md and the lockstep header too.
-case "$out" in *"6 sites"*) ok "and it finds all six of them, two more than the ticket listed" ;;
-               *) bad "finds six sites (got: $out)" ;; esac
+# Anchored: a bare substring also matched "16 sites", which is the opposite of pinning a count.
+case "$out" in "check-template-dir-order: 6 sites,"*) ok "and it finds exactly six of them, two more than the ticket listed" ;;
+               *) bad "finds exactly six sites (got: $out)" ;; esac
 
 echo ""
 echo "template-dir-order tests: $pass passed, $fail failed"

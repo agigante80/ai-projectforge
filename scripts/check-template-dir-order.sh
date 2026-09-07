@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # check-template-dir-order.sh: every copy of the template-dir resolution order must match (#77).
 #
-# THE DEFECT. The order is a five-entry, HOST-grouped list that five separate sites must agree on:
-# check-template-lockstep.sh twice (its header comment and resolve_dir), ticket-gate.md, and
-# adapt/SKILL.md twice. The #61/#74 review found the copies had already diverged, case-grouped
+# THE DEFECT. The order is a five-entry, HOST-grouped list that SIX separate sites must agree on:
+# check-template-lockstep.sh twice (its header comment and resolve_dir), ticket-gate.md,
+# dep-auditor.md, and adapt/SKILL.md twice. The #61/#74 review found the copies had already diverged, case-grouped
 # against host-grouped, before that PR merged. Two of the sites are prose an LLM executor will
 # paraphrase, which is the failure mode forge-adapt-catalogue.sh was extracted to end.
 #
@@ -42,15 +42,26 @@ TOKEN = re.compile(r'\.(?:forgejo|gitea|github)/(?:ISSUE_TEMPLATE|issue_template
 # comparison entirely, is closed by the site COUNT its contract test asserts.
 MIN = 4
 
+# THE CANON, pinned here rather than merely inferred from whatever the copies happen to say. The
+# first version compared the sites only to each other, so one sweep reordering ALL of them passed
+# with CI green and reintroduced the exact #61 defect, while the error message claimed a canonical
+# order that nothing enforced. This line is now the single definition the ticket asked for; every
+# site is checked against it.
+CANON = ('.forgejo/ISSUE_TEMPLATE', '.forgejo/issue_template',
+         '.gitea/ISSUE_TEMPLATE', '.gitea/issue_template', '.github/ISSUE_TEMPLATE')
+
 sites = []
 for dirpath, dirnames, filenames in os.walk(root):
     dirnames[:] = [d for d in dirnames if d not in ('.git', 'node_modules', 'temp', '.full-review')]
     for fn in sorted(filenames):
-        # A contract test carries deliberately WRONG orders as fixtures. Scanning them would make
-        # every such test a permanent failure, so tests are never sites.
-        if fn.startswith('test-'):
-            continue
         path = os.path.join(dirpath, fn)
+        rel_ = os.path.relpath(path, root)
+        # THIS DIRECTORY's contract tests carry deliberately wrong orders as fixtures, so scanning
+        # them would make every such test a permanent failure. Matching on the bare filename was
+        # too broad: it silently excluded the shipped component
+        # plugins/forge-kit-testing/agents/test-automator.md from the scan entirely.
+        if re.match(r'scripts/test-[^/]*\.sh$', rel_):
+            continue
         try:
             lines = open(path, encoding='utf-8', errors='replace').read().split('\n')
         except OSError:
@@ -64,9 +75,19 @@ for dirpath, dirnames, filenames in os.walk(root):
         for m in re.finditer(
                 r'(?:%s)(?:[\s,`/\\#()]*(?:%s))+' % (TOKEN.pattern, TOKEN.pattern), text):
             seq = TOKEN.findall(m.group(0))
-            if len(seq) >= MIN:
-                ln = text[:m.start()].count('\n') + 1
-                sites.append((os.path.relpath(path, root), ln, tuple(seq)))
+            ln = text[:m.start()].count('\n') + 1
+            # Two back-to-back copies separated only by punctuation matched as ONE run, so a file
+            # whose copies were identical and correct failed with "the order differs between
+            # sites". Restart a site wherever the canon's first entry appears again.
+            groups, cur = [], []
+            for tok in seq:
+                if tok == CANON[0] and cur:
+                    groups.append(cur); cur = []
+                cur.append(tok)
+            if cur: groups.append(cur)
+            for g in groups:
+                if len(g) >= MIN:
+                    sites.append((rel_, ln, tuple(g)))
 
 if not sites:
     print(f"check-template-dir-order: no resolution order found under {root}. "
@@ -77,8 +98,12 @@ orders = {}
 for rel, ln, seq in sites:
     orders.setdefault(seq, []).append(f"{rel}:{ln}")
 
-if len(orders) > 1:
-    print("check-template-dir-order: the resolution order differs between sites.\n", file=sys.stderr)
+if len(orders) > 1 or (CANON not in orders):
+    if CANON not in orders:
+        print("check-template-dir-order: NO site carries the canonical order.\n", file=sys.stderr)
+    else:
+        print("check-template-dir-order: the resolution order differs between sites.\n", file=sys.stderr)
+    print(f"  canonical: {' '.join(CANON)}\n", file=sys.stderr)
     for seq, where in sorted(orders.items(), key=lambda kv: -len(kv[1])):
         print(f"  {len(where)} site(s): {' '.join(seq)}", file=sys.stderr)
         for w in where: print(f"      {w}", file=sys.stderr)
