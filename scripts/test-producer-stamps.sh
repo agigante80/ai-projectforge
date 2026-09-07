@@ -56,7 +56,20 @@ body: |
   template-version: 6
 M
 bash "$SCRIPT" "$T/bare" >/dev/null 2>&1
-[ $? -ne 0 ] && ok "the bare form without an HTML comment is caught too" || bad "bare form caught"
+[ $? -eq 1 ] && ok "the bare form without an HTML comment is caught too" || bad "bare form caught"
+
+# --- the contract is "anywhere under the tree", not "in markdown" -------------------------------
+# Producers are not all prose: hooks are .py, shell assets are .sh, and the release lanes are .yml.
+# With only .md fixtures, restricting the guard to markdown left the suite green.
+for ext in py sh yml; do
+  mk "$T/ext-$ext/g/hooks/producer.$ext" <<M
+# emits a ticket body
+# <!-- template-version: 4 -->
+M
+  bash "$SCRIPT" "$T/ext-$ext" >/dev/null 2>&1
+  [ $? -eq 1 ] && ok "a hardcoded stamp in a .$ext file is caught too" \
+    || bad "non-markdown producers are scanned (.$ext)"
+done
 
 # --- a component version marker is NOT a template stamp -----------------------------------------
 # Every component carries `<!-- <name>-version: N -->` with a real digit. Matching those would make
@@ -133,6 +146,10 @@ M
   [ "$rc" -ne 0 ] && ok "a partial scan still fails" || bad "partial scan fails (rc=$rc)"
   case "$out" in *"template-version: 7"*) ok "and it still reports the violation it did find" ;;
                  *) bad "a scan error must not hide a found violation (got: $out)" ;; esac
+  # The NOTE is the only signal that the hit list may be incomplete, so it needs its own assertion
+  # or deleting it would leave the suite green.
+  case "$out" in *"there may be more"*) ok "and warns that the hit list may be incomplete" ;;
+                 *) bad "partial scan warns the list may be incomplete (got: $out)" ;; esac
 fi
 
 # --- the real repo must pass, or the guard is not actually adopted -------------------------------
