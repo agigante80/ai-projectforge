@@ -125,6 +125,78 @@ grep -q 'Body mentioning skills: not-a-declaration' "$T/rewrite.md" \
   && ok "--rewrite does not touch the body" \
   || bad "--rewrite left the body alone"
 
+# --rewrite must handle the inline flow form too, which the block-form case above cannot reach.
+cp "$T/flow.md" "$T/rewrite-flow.md"
+bash "$SCRIPT" --rewrite "$T/rewrite-flow.md"
+eq "--rewrite handles the inline flow form" \
+   "$(grep '^skills:' "$T/rewrite-flow.md")" "skills: [gate-lenses, privacy-regime]"
+
+# --- round 1: shapes OUTSIDE the supported grammar must REFUSE, never corrupt -------------------
+# The script parses two YAML shapes, not YAML. Everything else has to fail closed, because a
+# half-understood rewrite leaves frontmatter that no longer parses and the agent stops loading.
+agent "$T/multiline.md" <<'M'
+---
+name: a
+skills: [
+  forge-kit-governance:gate-lenses,
+  privacy-regime
+]
+---
+body
+M
+before=$(cat "$T/multiline.md")
+err=$(bash "$SCRIPT" --rewrite "$T/multiline.md" 2>&1 >/dev/null); rc=$?
+eq "a multi-line flow list refuses with exit 2" "$rc" "2"
+eq "a refused rewrite leaves the file byte-identical" "$(cat "$T/multiline.md")" "$before"
+case "$err" in *"unsupported"*) ok "the refusal says the shape is unsupported" ;;
+               *) bad "refusal message names the problem (got '$err')" ;; esac
+err=$(bash "$SCRIPT" --names "$T/multiline.md" 2>&1 >/dev/null)
+eq "--names refuses the same shape rather than printing nothing" "$?" "2"
+
+agent "$T/scalar.md" <<'M'
+---
+name: a
+skills: forge-kit-governance:gate-lenses
+---
+body
+M
+bash "$SCRIPT" "$T/scalar.md" >/dev/null 2>&1
+eq "a plain scalar skills: value refuses (not silently empty)" "$?" "2"
+
+# --- round 1: quotes are ordinary YAML and --rewrite must strip them like parse does ------------
+agent "$T/quoted.md" <<'M'
+---
+name: a
+skills:
+  - "forge-kit-governance:gate-lenses"
+  - 'privacy-regime'
+---
+body
+M
+eq "--names strips quotes in block form" \
+   "$(bash "$SCRIPT" --names "$T/quoted.md" | tr '\n' ',')" "gate-lenses,privacy-regime,"
+bash "$SCRIPT" --rewrite "$T/quoted.md"
+eq "--rewrite strips quotes instead of leaving a stray one" \
+   "$(grep -c '"' "$T/quoted.md")" "0"
+eq "--rewrite of quoted block form round-trips" \
+   "$(bash "$SCRIPT" "$T/quoted.md" | tr '\n' ',')" "gate-lenses,privacy-regime,"
+
+agent "$T/quotedflow.md" <<'M'
+---
+name: a
+skills: ["forge-kit-governance:gate-lenses", privacy-regime]   # trailing comment
+---
+body
+M
+bash "$SCRIPT" --rewrite "$T/quotedflow.md"
+eq "--rewrite strips quotes in flow form and keeps trailing content" \
+   "$(grep '^skills:' "$T/quotedflow.md")" "skills: [gate-lenses, privacy-regime]   # trailing comment"
+
+# --- round 1: a rewrite must not silently change the file mode ----------------------------------
+cp "$T/block.md" "$T/mode.md"; chmod 644 "$T/mode.md"
+bash "$SCRIPT" --rewrite "$T/mode.md"
+eq "--rewrite preserves the file mode" "$(stat -c '%a' "$T/mode.md")" "644"
+
 # --- fail closed on a missing file, rather than printing nothing and exiting 0 -------------------
 err=$(bash "$SCRIPT" "$T/does-not-exist.md" 2>&1 >/dev/null); rc=$?
 eq "a missing agent file exits 2 (fail closed, not a silent empty list)" "$rc" "2"

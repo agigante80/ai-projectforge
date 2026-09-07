@@ -48,6 +48,20 @@ extract() {
   ' "$1"
 }
 
+# This parses two YAML SHAPES, not YAML. Anything else has to fail closed: a half-understood
+# rewrite leaves frontmatter that no longer parses, and the agent then stops loading entirely,
+# which is a worse outcome than the silent missing skill this script exists to prevent.
+#   supported: `skills:` followed by `  - name` lines, or `skills: [a, b]` closed on the SAME line.
+#   refused:   a multi-line flow list, a plain scalar, a block scalar, anything else.
+classify() {
+  extract "$1" | awk '
+    /^skills:[[:space:]]*$/            { print "block"; seen = 1; exit }
+    /^skills:[[:space:]]*\[.*\]/       { print "flow";  seen = 1; exit }
+    /^skills:/                         { print "bad";   seen = 1; exit }
+    END { if (!seen) print "none" }
+  '
+}
+
 # Both YAML shapes the field is written in: a block list, and an inline flow sequence.
 parse() {
   awk '
@@ -81,6 +95,13 @@ parse() {
 # skills, and in both the SKILL name is the last segment.
 bare() { sed 's/.*://'; }
 
+shape="$(classify "$f")"
+if [ "$shape" = bad ]; then
+  echo "forge-adapt-agent-skills: unsupported 'skills:' shape in '$f'." >&2
+  echo "  Supported: a block list, or an inline flow list closed on the same line." >&2
+  exit 2
+fi
+
 case "$mode" in
   print) extract "$f" | parse ;;
   names) extract "$f" | parse | bare ;;
@@ -92,13 +113,15 @@ case "$mode" in
       NR == 1 && $0 == "---" { infm = 1; print; next }
       infm && /^---[[:space:]]*$/ { infm = 0; print; next }
       infm && /^skills:[[:space:]]*\[/ {
-        head = $0; sub(/\[.*$/, "[", head)
-        body = $0; sub(/^[^[]*\[/, "", body); tail = "]"; sub(/\].*$/, "", body)
+        idx = index($0, "["); head = substr($0, 1, idx); rest = substr($0, idx + 1)
+        cidx = index(rest, "]")
+        body = substr(rest, 1, cidx - 1); tail = substr(rest, cidx)   # tail keeps ] and any comment
         n = split(body, parts, ","); out = ""
         for (i = 1; i <= n; i++) {
           gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[i])
+          gsub(/^["'"'"']|["'"'"']$/, "", parts[i])
           sub(/.*:/, "", parts[i])
-          out = out (i > 1 ? ", " : "") parts[i]
+          if (parts[i] != "") out = out (out == "" ? "" : ", ") parts[i]
         }
         print head out tail; next
       }
@@ -107,11 +130,16 @@ case "$mode" in
         item = $0
         sub(/^[[:space:]]*-[[:space:]]*/, "", item)
         prefix = substr($0, 1, length($0) - length(item))   # preserve the exact indentation
+        gsub(/^["'"'"']|["'"'"']$/, "", item)
         sub(/.*:/, "", item)
         print prefix item; next
       }
       infm && inlist && /^[^[:space:]]/ { inlist = 0 }
       { print }
-    ' "$f" > "$tmp" && mv "$tmp" "$f" || { rm -f "$tmp"; exit 2; }
+    ' "$f" > "$tmp" || { rm -f "$tmp"; exit 2; }
+    # Truncate in place rather than `mv`: mv would install mktemp's 0600 over the agent's own mode,
+    # and a mode change does not show up in a git diff.
+    cat "$tmp" > "$f" || { rm -f "$tmp"; exit 2; }
+    rm -f "$tmp"
     ;;
 esac

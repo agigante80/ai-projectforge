@@ -13,7 +13,7 @@ description: >
   Backward-compatible: also triggered by "upgrade-audit".
 ---
 
-<!-- forge-adapt-version: 52 -->
+<!-- forge-adapt-version: 53 -->
 
 # forge-adapt
 
@@ -444,7 +444,7 @@ For each chosen component, read the forge-kit template, rewrite it for this proj
      are still readable. **A missed skill fails SILENTLY**, so do not parse the frontmatter yourself:
 
      ```bash
-     "$FORGE_KIT_DIR"/scripts/forge-adapt-agent-skills.sh --names "$SRC_AGENT"   # what to install
+     "$FORGE_KIT_DIR"/scripts/forge-adapt-agent-skills.sh --names "$FORGE_KIT_DIR/plugins/<group>/agents/<name>.md"
      "$FORGE_KIT_DIR"/scripts/forge-adapt-agent-skills.sh --rewrite .claude/agents/<name>.md
      ```
 6. Confirm: `✓ <name> (<type>) v<N> - adapted for <stack>`.
