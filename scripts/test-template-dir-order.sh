@@ -186,6 +186,32 @@ M
 bash "$SCRIPT" "$T/table" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "a table-formatted copy is scanned, not invisible" || bad "table copies are scanned"
 
+# --- round 3: a correct copy followed by a SHORT mention must not read as one divergent site ----
+# The merged-run fallback reported the whole run whenever the split did not yield all-full groups,
+# so a canonical copy trailed by a two-directory mention became one seven-entry "site" and failed
+# the build on content that is correct.
+mk "$T/tail/a.sh" <<M
+  for d in $CANON; do :; done
+M
+mk "$T/tail/b.md" <<M
+# $CANON
+# .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE
+M
+bash "$SCRIPT" "$T/tail" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "a canonical copy followed by a short mention still passes" \
+  || bad "a trailing short mention does not corrupt the copy before it"
+
+# --- round 3: deleting every copy must NOT read as agreement ------------------------------------
+# Scanning the guard's own CANON tuple meant the site list was never empty, so a tree with every
+# real copy removed exited 0 saying "1 sites, all carrying the same order", contradicting the
+# guard's own header. The definition is not a copy and is no longer counted as one.
+mk "$T/onlyguard/x.md" <<'M'
+nothing here names a template directory
+M
+bash "$SCRIPT" "$T/onlyguard" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "a tree with no copies fails even though the guard knows the canon" \
+  || bad "an empty tree must not read as agreement"
+
 # --- fail closed on a missing root ---------------------------------------------------------------
 bash "$SCRIPT" "$T/does-not-exist" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "a missing root fails closed with exit 2" || bad "missing root fails closed"
@@ -197,11 +223,11 @@ out=$(bash "$SCRIPT" 2>&1); rc=$?
 # three entries would simply drop out of the comparison and the guard would report agreement among
 # the survivors. The ticket said four; the guard found dep-auditor.md and the lockstep header too.
 # Anchored: a bare substring also matched "16 sites", which is the opposite of pinning a count.
-# SEVEN: the six copies plus the guard's own CANON tuple, which the punctuation set now reaches.
-# That is deliberate. The definition being scanned alongside the copies is the cheapest possible
-# proof that it agrees with them, and it costs nothing to include.
-case "$out" in "check-template-dir-order: 7 sites,"*) ok "and it finds exactly seven, the six copies plus the canon itself" ;;
-               *) bad "finds exactly seven sites (got: $out)" ;; esac
+# EXACTLY six, which pins the count as well as the agreement. The guard holds the definition and
+# is not scanned as a copy of it: counting itself made the site list impossible to empty, so a tree
+# with every copy deleted read as agreement.
+case "$out" in "check-template-dir-order: 6 sites,"*) ok "and it finds exactly the six copies" ;;
+               *) bad "finds exactly six sites (got: $out)" ;; esac
 
 echo ""
 echo "template-dir-order tests: $pass passed, $fail failed"

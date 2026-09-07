@@ -60,11 +60,16 @@ for dirpath, dirnames, filenames in os.walk(root):
     # filed to be done together with #140 rather than as a third copy of the same rule.
     dirnames[:] = [d for d in dirnames
                    if d not in ('.git', 'node_modules', 'temp', '.full-review',
-                                '.superpowers', '.venv', 'node_modules')
+                                '.superpowers', '.venv', '.private-journal')
                    and not (d == 'overnight' and os.path.basename(dirpath) == '.claude')]
     for fn in sorted(filenames):
         path = os.path.join(dirpath, fn)
         rel_ = os.path.relpath(path, root)
+        # This guard holds the DEFINITION, not a copy of it. Counting it as a site made `sites`
+        # impossible to empty, so deleting every real copy reported "1 sites, all carrying the
+        # same order" and exited 0, contradicting this file's own header.
+        if os.path.basename(path) == 'check-template-dir-order.sh':
+            continue
         # THIS DIRECTORY's contract tests carry deliberately wrong orders as fixtures, so scanning
         # them would make every such test a permanent failure. Matching on the bare filename was
         # too broad: it silently excluded the shipped component
@@ -72,38 +77,37 @@ for dirpath, dirnames, filenames in os.walk(root):
         if re.match(r'scripts/test-[^/]*\.sh$', rel_):
             continue
         try:
-            lines = open(path, encoding='utf-8', errors='replace').read().split('\n')
+            text = open(path, encoding='utf-8', errors='replace').read()
         except OSError:
             continue
         # An ORDERING is a bare list: the tokens are separated only by punctuation. PROSE puts
         # WORDS between them, as in "`.github/ISSUE_TEMPLATE/` on GitHub, or to `.forgejo/...`".
         # Keying on that is what separates the real sites from the documentation passages, with no
         # allowlist and no hand-maintained site list. The punctuation set includes table pipes and
-        # quotes, so a copy laid out as a markdown table or a python tuple is seen rather than
-        # silently skipped, and that is why the CANON tuple above is itself scanned and counted.
-        text = '\n'.join(lines)
+        # quotes, so a copy laid out as a markdown table is seen rather than silently skipped.
         for m in re.finditer(
                 r'(?:%s)(?:[\s,`/\\#()|;:"\'-]*(?:%s))+' % (TOKEN.pattern, TOKEN.pattern), text):
             seq = TOKEN.findall(m.group(0))
             ln = text[:m.start()].count('\n') + 1
-            # Two back-to-back copies separated only by punctuation match as ONE run, so a file
-            # whose copies were identical and correct failed with "the order differs between
-            # sites". Restart a site wherever the canon's first entry appears again, but ONLY when
-            # every resulting group is a full ordering: splitting unconditionally made a
-            # host-reordered copy fragment into sub-threshold pieces and VANISH from the
-            # comparison, which let the #61 defect pass green. A copy that does not split cleanly
-            # is reported whole, and being wrong is exactly what it is.
-            groups, cur = [], []
-            for tok in seq:
-                if tok == CANON[0] and cur:
-                    groups.append(cur); cur = []
-                cur.append(tok)
-            if cur: groups.append(cur)
-            if not all(len(g) >= MIN for g in groups):
-                groups = [seq]
-            for g in groups:
-                if len(g) >= MIN:
-                    sites.append((rel_, ln, tuple(g)))
+            # Punctuation-only separation merges neighbours into one run, so the run has to be
+            # taken apart. Two earlier attempts each broke something: splitting at the canon's
+            # first entry unconditionally made a host-reordered copy fragment into sub-threshold
+            # pieces and VANISH (the #61 defect passing green), and falling back to reporting the
+            # whole run flagged a correct copy trailed by a short mention as one long divergent
+            # site. Consume CANONICAL windows greedily instead: each exact match is a site and the
+            # scan advances past it, so a correct copy is recognised no matter what follows. What
+            # is left over is reported only if it is long enough to be an ordering in its own
+            # right, which is what keeps a wrong copy visible.
+            i = 0
+            while i < len(seq):
+                if tuple(seq[i:i + len(CANON)]) == CANON:
+                    sites.append((rel_, ln, CANON)); i += len(CANON); continue
+                rest = seq[i:]
+                nxt = next((j for j in range(1, len(rest))
+                            if tuple(rest[j:j + len(CANON)]) == CANON), len(rest))
+                if nxt >= MIN:
+                    sites.append((rel_, ln, tuple(rest[:nxt])))
+                i += nxt
 
 if not sites:
     print(f"check-template-dir-order: no resolution order found under {root}. "
