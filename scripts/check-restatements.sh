@@ -25,7 +25,10 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-if [ "$#" -ge 2 ]; then
+if [ "$#" -eq 1 ]; then
+  echo "check-restatements: give BOTH a doc and at least one gate file, or no arguments at all" >&2
+  exit 2
+elif [ "$#" -ge 2 ]; then
   DOC="$1"; shift; GATE_FILES=("$@")
 else
   ROOT="$(git -C "$HERE" rev-parse --show-toplevel 2>/dev/null)" || {
@@ -53,17 +56,34 @@ if not m:
 block = m.group(1)
 
 # Numbered items. An item runs to the next "N. " at the start of a line, or the end of the block.
-starts = [mm.start() for mm in re.finditer(r'^\d+\. ', block, re.M)]
-items = []
-for i, s in enumerate(starts):
-    e = starts[i + 1] if i + 1 < len(starts) else len(block)
-    items.append(block[s:e])
+# An item runs from its "N. " line through its INDENTED continuations and blank lines, and stops
+# at the first unindented line that is not another item. Bounding the last one at end-of-block
+# swallowed the allowlist comment and the closing prose, whose rule mentions then joined that
+# item's rule set: its single anchor went on to whitelist that section for rules 4 and 5.
+items, cur = [], None
+for line in block.split('\n'):
+    if re.match(r'^\d+\. ', line):
+        if cur is not None: items.append('\n'.join(cur))
+        cur = [line]; continue
+    if cur is None: continue
+    if line.strip() == '' or line.startswith((' ', '\t')):
+        cur.append(line); continue
+    items.append('\n'.join(cur)); cur = None
+if cur is not None: items.append('\n'.join(cur))
 if not items:
     print("check-restatements: the Precedence section lists no numbered items", file=sys.stderr)
     sys.exit(2)
 
 ANCHOR = re.compile(r'<!--\s*anchor:\s*"(.*?)"\s*-->', re.S)
 RULEREF = re.compile(r'\brule[-\s](\d+)', re.I)
+# "rules 2, 3, 4 and 7" is one mention of four rules; matching only the first granted rule 1 alone.
+RULES_PLURAL = re.compile(r'\brules\s+((?:\d+(?:\s*(?:,|and)\s*)?)+)', re.I)
+
+def rules_in(text):
+    found = set(RULEREF.findall(text))
+    for mm in RULES_PLURAL.finditer(text):
+        found.update(re.findall(r'\d+', mm.group(1)))
+    return found
 
 # Allowlist: "<section> :: rule <N> :: <reason>". The reason is mandatory.
 allow, allow_bad = set(), []
@@ -75,14 +95,19 @@ for a in re.finditer(r'<!--\s*restatement-allow:\s*(.*?)\s*-->', doc, re.S):
     if rn: allow.add((parts[0], rn.group(1)))
 
 # Gate text, attributed to its nearest preceding heading.
-sections, text = [], ""
+sections = []
 for path in gate_paths:
-    sec = "(top)"
+    name = path.split('/')[-1]
+    sec, fenced = f"{name} (top)", False
     for line in open(path):
-        h = re.match(r'^#{2,4} (.+)', line)
-        if h: sec = h.group(1).strip()
+        if line.lstrip().startswith('```'):
+            fenced = not fenced
+        elif not fenced:
+            h = re.match(r'^#{2,4} (.+)', line)
+            # Keyed by FILE too: ticket-gate.md and its companion skill share heading names, and
+            # without this an anchor in one silently granted coverage in the other.
+            if h: sec = f"{name} :: {h.group(1).strip()}"
         sections.append((sec, line))
-        text += line
 
 def section_of(needle):
     """The set of sections whose text contains this literal anchor."""
@@ -104,7 +129,7 @@ for bad in allow_bad:
 covered = {}                     # rule -> set of sections an item claims for it
 for n, item in enumerate(items, 1):
     anchors = ANCHOR.findall(item)
-    rules = set(RULEREF.findall(item))
+    rules = rules_in(item)
     if not anchors:
         errors.append(f"Precedence item {n} declares no anchor, so nothing can verify it")
         continue
@@ -122,9 +147,13 @@ for sec, line in sections:
     for r in RULEREF.findall(line):
         if (sec, r) in seen: continue
         seen.add((sec, r))
-        # The section is matched by PREFIX so an entry can say "Step 2.5" rather than repeating
-        # the whole heading. It still has to name a real section, so it cannot silence the file.
-        if any(rr == r and sec.startswith(ss) for ss, rr in allow): continue
+        # Matched by PREFIX against the heading, so an entry can say "Step 2.5" rather than
+        # repeating the whole heading, and optionally against the file-qualified
+        # "<file> :: <heading>" form when a heading name is shared across files. It still has to
+        # name a real section, so it cannot be used to silence the file.
+        head = sec.split(' :: ', 1)[1] if ' :: ' in sec else sec
+        if any(rr == r and (head.startswith(ss) or sec.startswith(ss)) for ss, rr in allow):
+            continue
         if sec not in covered.get(r, set()):
             errors.append(f"UNLISTED restatement: rule {r} is referenced in [{sec}] "
                           f"but no Precedence item anchors rule {r} there")

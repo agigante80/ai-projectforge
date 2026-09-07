@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 9 -->
+<!-- doc-rules-version: 10 -->
 
 # Ticket standards (canonical)
 
@@ -129,15 +129,23 @@ domain, per the N/A rule below.
 ## Precedence
 
 `ticket-gate` restates parts of this doc so they hold in installs without it. Those restatements
-are sanctioned exceptions to the single-source rule above. **This list is complete, and
-`scripts/check-restatements.sh` is what makes that claim safe to believe** (issue #125). Each item
-carries one or more literal ANCHORS into the gate; CI fails if an anchor no longer resolves (a
-stale entry) or if the gate references a rule in a section no anchor covers (an unlisted
-restatement). Editing a rule means editing every location its anchors name, in the same change.
+are sanctioned exceptions to the single-source rule above. `scripts/check-restatements.sh` verifies
+this list in CI (issue #125). Each item carries one or more literal ANCHORS into the gate, and the
+build fails if an anchor no longer resolves (a stale entry) or if the gate references a rule in a
+section no anchor covers (an unlisted restatement). Editing a rule means editing every location its
+anchors name, in the same change. An item with no anchor fails too, because an unanchored entry is
+exactly the thing that rotted before.
 
-The claim used to be hand-maintained, and it was false every time it was made: three consecutive
-review rounds on PR #123 each found more entries. Adding an item without an anchor fails the build,
-because an unanchored entry is exactly the thing that rotted before.
+**What the guard does NOT prove, stated plainly, because overclaiming is this section's own bug.**
+Detection keys on the literal token `rule N`. A restatement that paraphrases a rule without naming
+it is invisible, and two listed entries are in that shape today: the security lens checklist, whose
+file contains no rule token at all, and rule 8's implementation concreteness in the critic's brief.
+So this list is complete with respect to everything the guard can see, which is a narrower claim
+than the one this section used to make and get wrong three review rounds running.
+
+**Therefore: a restatement added to the gate MUST name its rule.** Writing `(rule 7)` beside the
+bar is what makes the next one detectable. A paraphrase citing no rule number is the one shape that
+can still fork silently, so do not create more of them.
 
 1. The three hard-fail bars: UI E2E (rule 3), API endpoint coverage (rule 2), and the
    personal-data judgment (rule 4), in the critic's brief.

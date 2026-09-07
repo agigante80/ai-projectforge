@@ -116,6 +116,79 @@ bash "$SCRIPT" "$T/g/docs/guides/ticket-standards.md" "$T/g/gate/ticket-gate.md"
 [ $? -ne 0 ] && ok "an allowlist entry for the wrong section does not silence the real one" \
   || bad "allowlist prefix must still match a real section"
 
+# --- round 1: the LAST item must not swallow the prose after it ---------------------------------
+# The final item was bounded at end-of-block, so it absorbed the allowlist comment and the closing
+# paragraphs. Its rule set grew to whatever those mentioned, and its anchor then whitelisted that
+# section for rules it never covered: a brand-new rule-5 bar in Step 3A passed with exit 0.
+cat > "$T/gate-tail.md" <<'G'
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+5. **Security bar** restating rule 5 point for point, newly added and unlisted
+G
+cat > "$T/items-tail.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+Closing prose that mentions rule 5 and rule 4 while explaining precedence.
+I
+mkfix "$T/h" "$T/items-tail.md" "$T/gate-tail.md"
+out=$(bash "$SCRIPT" "$T/h/docs/guides/ticket-standards.md" "$T/h/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "trailing prose does not extend the last item's rule set" \
+  || bad "trailing prose leaks into the last item (a new rule 5 bar passed)"
+
+# --- round 1: a heading must be scoped to its FILE ----------------------------------------------
+# Sections were keyed by heading text alone, and the agent and its companion skill both have a
+# "Lens definitions" heading, so an anchor in one silently covered the other.
+cat > "$T/gate-dup.md" <<'G'
+### Lens definitions
+The agent restates rule 5 here, and nothing lists it.
+G
+cat > "$T/skill-dup.md" <<'G'
+## Lens definitions
+- OWASP Top 10: injection, XSS, CSRF
+G
+cat > "$T/items-dup.md" <<'I'
+1. The security lens checklist restates rule 5. <!-- anchor: "OWASP Top 10: injection, XSS, CSRF" -->
+I
+mkfix "$T/i" "$T/items-dup.md" "$T/gate-dup.md"
+cp "$T/skill-dup.md" "$T/i/gate/SKILL.md"
+out=$(bash "$SCRIPT" "$T/i/docs/guides/ticket-standards.md" "$T/i/gate/ticket-gate.md" "$T/i/gate/SKILL.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "a same-named heading in another file does not grant coverage" \
+  || bad "identical headings in two files collapse into one section"
+
+# --- round 1: plural rule lists must parse ------------------------------------------------------
+cat > "$T/gate-plural.md" <<'G'
+### Step 0c
+| Section | Derived from | restating rule 2 and rule 7 shape
+G
+cat > "$T/items-plural.md" <<'I'
+1. The synthesis table restates the shape required by rules 2 and 7. <!-- anchor: "| Section | Derived from |" -->
+I
+mkfix "$T/j" "$T/items-plural.md" "$T/gate-plural.md"
+bash "$SCRIPT" "$T/j/docs/guides/ticket-standards.md" "$T/j/gate/ticket-gate.md" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "a plural 'rules 2 and 7' grants coverage for both" || bad "plural rule lists parse"
+
+# --- round 1: a lone path argument must not silently check the repo instead ----------------------
+bash "$SCRIPT" "$T/a/docs/guides/ticket-standards.md" >/dev/null 2>&1
+[ $? -eq 2 ] && ok "one path argument is refused rather than silently ignored" \
+  || bad "a single path argument is refused"
+
+# --- round 1: headings inside fenced blocks are payload, not sections ----------------------------
+cat > "$T/gate-fence.md" <<'G'
+### Step 5: Post to the forge
+The bar this step enforces is anchored here, outside any fence.
+```markdown
+## ticket-gate: remediation guide
+restating rule 6 inside a template payload
+```
+G
+cat > "$T/items-fence.md" <<'I'
+1. Rule 6's bar in the post step. <!-- anchor: "The bar this step enforces is anchored here" -->
+I
+mkfix "$T/k" "$T/items-fence.md" "$T/gate-fence.md"
+out=$(bash "$SCRIPT" "$T/k/docs/guides/ticket-standards.md" "$T/k/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "a heading inside a fenced block is payload, not a section" \
+  || bad "fenced headings are not sections (rc=$rc: $out)"
+
 # --- fail closed on a missing input, never pass vacuously ----------------------------------------
 bash "$SCRIPT" "$T/nope.md" "$T/gate-ok.md" >/dev/null 2>&1
 [ $? -ne 0 ] && ok "a missing doc fails closed" || bad "missing doc fails closed"
@@ -123,7 +196,6 @@ bash "$SCRIPT" "$T/a/docs/guides/ticket-standards.md" "$T/nope.md" >/dev/null 2>
 [ $? -ne 0 ] && ok "a missing gate fails closed" || bad "missing gate fails closed"
 
 # --- the real repo must pass, or this guard is not actually adopted ------------------------------
-ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
 out=$(bash "$SCRIPT" 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "the repo's own Precedence list is complete and current" \
   || bad "repo Precedence list (rc=$rc): $out"
