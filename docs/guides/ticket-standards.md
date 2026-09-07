@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 11 -->
+<!-- doc-rules-version: 12 -->
 
 # Ticket standards (canonical)
 
@@ -145,9 +145,11 @@ elsewhere in the same section inherited the licence and passed.
 Detection keys on the literal token `rule N` (or `rules N and M`), validated against the rule
 numbers this doc defines. A restatement that paraphrases a rule without naming it is invisible, and
 two listed entries are in that shape today: the security lens checklist, whose file contains no
-rule token at all, and rule 8's implementation concreteness in the critic's brief. So this list is
-complete with respect to everything the guard can see, which is a narrower claim than the one this
-section used to make and get wrong three review rounds running.
+rule token at all, and rule 8's implementation concreteness in the critic's brief. Coverage is also
+per ITEM rather than per anchor, so a new bar for one rule an item names can sit beside an anchor
+for another rule it names and pass (issue #138). So this list is complete with respect to
+everything the guard can see, which is a narrower claim than the one this section used to make and
+get wrong three review rounds running.
 
 **Therefore: a restatement added to the gate MUST name its rule.** Writing `(rule 7)` beside the
 bar is what makes the next one detectable. A paraphrase citing no rule number is the one shape that

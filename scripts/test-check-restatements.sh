@@ -279,6 +279,59 @@ mkfix "$T/p" "$T/items-nodigit.md" "$T/gate-pointer.md"
 bash "$SCRIPT" "$T/p/docs/guides/ticket-standards.md" "$T/p/gate/ticket-gate.md" >/dev/null 2>&1
 [ $? -ne 0 ] && ok "an allowlist entry naming no rule number is refused" || bad "allowlist needs a rule number"
 
+# --- round 3: a gate reference to a rule the doc does not define must be an ERROR --------------
+# rules_in() silently dropped any number outside the doc's own rule set, which conflates "not a
+# rule reference" with "a reference to a rule that no longer exists". A new (rule 9) bar passed,
+# and renumbering a rule would make every stale gate reference invisible at once.
+cat > "$T/gate-undef.md" <<'G'
+### Step 3B: The critic
+- **Threat-model bar (rule 9):** invented, and rule 9 does not exist in the doc
+G
+cat > "$T/items-undef.md" <<'I'
+1. Rule 1's quality bar. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+I
+mkfix "$T/q" "$T/items-undef.md" "$T/gate-undef.md"
+out=$(bash "$SCRIPT" "$T/q/docs/guides/ticket-standards.md" "$T/q/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "the gate citing an undefined rule fails" || bad "undefined rule citation fails"
+case "$out" in *"does not define"*) ok "and it says the doc does not define that rule" ;;
+               *) bad "names the undefined rule (got: $out)" ;; esac
+
+# --- round 3: an allowlist entry must be scoped to ONE section in ONE file ----------------------
+cat > "$T/gate-share.md" <<'G'
+### Lens definitions
+a bar restating rule 5 in the agent
+G
+cat > "$T/skill-share.md" <<'G'
+## Lens definitions
+a bar restating rule 5 in the skill
+G
+cat > "$T/items-share.md" <<'I'
+1. Rule 1's quality bar. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: Lens definitions :: rule 5 :: shared heading, silences two files -->
+I
+mkfix "$T/r" "$T/items-share.md" "$T/gate-share.md"
+cp "$T/skill-share.md" "$T/r/gate/SKILL.md"
+out=$(bash "$SCRIPT" "$T/r/docs/guides/ticket-standards.md" "$T/r/gate/ticket-gate.md" "$T/r/gate/SKILL.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "an allowlist heading shared by two files is refused as too broad" \
+  || bad "a shared heading silences both files"
+
+# and a file-name entry must not silence a whole file's pre-heading region
+cat > "$T/gate-top.md" <<'G'
+a bar restating rule 5 before any heading at all
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+G
+cat > "$T/items-top.md" <<'I'
+1. Rule 1's quality bar. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: ticket-gate.md :: rule 5 :: names a whole file -->
+I
+mkfix "$T/s" "$T/items-top.md" "$T/gate-top.md"
+out=$(bash "$SCRIPT" "$T/s/docs/guides/ticket-standards.md" "$T/s/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "an allowlist entry naming a whole file does not silence its top region" \
+  || bad "a file-name allowlist entry silences the top region"
+
 # --- fail closed on a missing input, never pass vacuously ----------------------------------------
 bash "$SCRIPT" "$T/nope.md" "$T/gate-ok.md" >/dev/null 2>&1
 [ $? -ne 0 ] && ok "a missing doc fails closed" || bad "missing doc fails closed"

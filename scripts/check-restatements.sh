@@ -86,6 +86,14 @@ RULEREF = re.compile(r'\brule[-\s](\d+)', re.I)
 # "rules 2, 3, 4 and 7" is one mention of four rules; matching only the first granted rule 1 alone.
 RULES_PLURAL = re.compile(r'\brules\s+((?:\d+(?:\s*(?:,|and)\s*)?)+)', re.I)
 
+def undefined_rules_in(text):
+    """Singular `rule N` citations naming a rule the doc does not define.
+
+    Dropping these silently conflated "not a rule reference" with "a reference to a rule that no
+    longer exists": a new (rule 9) bar passed, and renumbering a rule would have made every stale
+    gate citation invisible while the guard reported the list complete."""
+    return {r for r in RULEREF.findall(text) if r not in VALID_RULES}
+
 def rules_in(text):
     found = set(RULEREF.findall(text))
     for mm in RULES_PLURAL.finditer(text):
@@ -138,14 +146,19 @@ WINDOW = 2
 
 # An allowlist entry must name ONE section. A bare prefix like "Step" matched every Step heading
 # and silenced a rule across all of them, while the comment beside it claimed that was impossible.
-all_heads = {sec.split(' :: ', 1)[1] for sec, _ in sections if ' :: ' in sec}
+all_sections = {sec for sec, _ in sections}
 allow_broad = []
 for ss, rr in sorted(allow):
-    hits = {h for h in all_heads if h.startswith(ss)}
+    hits = {q for q in all_sections
+            if q.startswith(ss) or (' :: ' in q and q.split(' :: ', 1)[1].startswith(ss))}
     if len(hits) > 1:
         allow_broad.append((ss, rr, sorted(hits)))
 
 errors = []
+for idx, (sec, line) in enumerate(sections):
+    for r in sorted(undefined_rules_in(line)):
+        errors.append(f"[{sec}] cites rule {r}, which this doc does not define "
+                      f"(defined: {', '.join(sorted(VALID_RULES, key=int))})")
 for ss, rr, hits in allow_broad:
     errors.append(f"allowlist entry '{ss} :: rule {rr}' is too broad: it matches "
                   f"{len(hits)} sections ({', '.join(hits[:3])}...). Name one.")
@@ -175,14 +188,12 @@ for idx, (sec, line) in enumerate(sections):
     for r in rules_in(line):
         if (idx, r) in seen: continue
         seen.add((idx, r))
-        # Matched by PREFIX against the heading, so an entry can say "Step 2.5" rather than
-        # repeating the whole heading, and optionally against the file-qualified
-        # "<file> :: <heading>" form when a heading name is shared across files. It still has to
-        # name a real section, so it cannot be used to silence the file.
         head = sec.split(' :: ', 1)[1] if ' :: ' in sec else sec
-        # Matched against the HEADING only. Matching the file-qualified string too let an entry
-        # like "ticket-gate.md" silence a rule across a whole file (round 2).
-        if any(rr == r and head.startswith(ss)
+        # An entry may name the heading ("Step 2.5") or the file-qualified form
+        # ("ticket-gate.md :: Step 2.5"). Either way the too-broad check above counts how many
+        # SECTIONS it reaches, so a shared heading or a bare file name is refused rather than
+        # silencing everything it touches.
+        if any(rr == r and (head.startswith(ss) or sec.startswith(ss))
                and not any(b[0] == ss and b[1] == rr for b in allow_broad) for ss, rr in allow):
             continue
         near = [1 for f, li in covered.get(r, []) if f == fname and abs(li - idx) <= WINDOW]
