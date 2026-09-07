@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# check-producer-stamps.sh: no component may HARDCODE a template-version stamp (issue #84).
+#
+# THE DEFECT. A component that emits ticket bodies used to write the version literally.
+# `dep-auditor` and `/ci-health` both did, still stamping v4 after the v5 bump, and
+# check-template-lockstep.sh could not see it: its scope is the issue-template dir plus the
+# canonical doc, not the producers. So every machine-filed ticket was born stale and triggered a
+# synthesis round-trip against a ticket the kit itself had just created. PR #83 fixed the two
+# instances by making both read the CURRENT version; this is what stops the next one.
+#
+# THE RULE, and it has no allowlist on purpose. Inside the scanned tree, `template-version:`
+# followed by a digit is always wrong. A producer resolves the version at runtime, and prose refers
+# to the marker in the `N` form, which the repo has followed everywhere since #83. A guard with an
+# allowlist would be argued with; this one cannot be.
+#
+# NOT the component markers. Every component carries `<!-- <name>-version: N -->` with a real
+# digit, so this anchors on the literal word `template-version` and nothing else.
+#
+# Usage: check-producer-stamps.sh [ROOT]      (default: this repo's plugins/ tree)
+# Exit: 0 clean, 1 a hardcoded stamp was found, 2 the root is unreadable.
+set -uo pipefail
+
+if [ "$#" -ge 1 ]; then
+  ROOT="$1"
+else
+  TOP="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)" || {
+    echo "check-producer-stamps: not a git checkout and no root given" >&2; exit 2; }
+  ROOT="$TOP/plugins"
+fi
+[ -d "$ROOT" ] || { echo "check-producer-stamps: '$ROOT' is not a directory" >&2; exit 2; }
+
+# -r so a tree with no files is a clean pass rather than a grep error: a project may legitimately
+# ship no producers at all.
+hits="$(grep -rnE 'template-version:[[:space:]]*[0-9]' "$ROOT" 2>/dev/null || true)"
+
+if [ -n "$hits" ]; then
+  echo "check-producer-stamps: hardcoded template-version stamp(s) found." >&2
+  echo "" >&2
+  printf '%s\n' "$hits" | sed 's|^|  x |' >&2
+  cat >&2 <<'MSG'
+
+A component that emits a ticket body must resolve the CURRENT version at runtime
+(read it from the issue-template dir), never write the number. Prose referring to the
+marker uses the N form: <!-- template-version: N -->.
+MSG
+  exit 1
+fi
+
+n="$(find "$ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')"
+echo "check-producer-stamps: $n file(s) under $ROOT, no hardcoded template-version stamps."
