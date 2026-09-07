@@ -2,12 +2,13 @@
 name: ticket-gate-reference
 description: |
   Reference material the ticket-gate agent reads once per run: the review output template it
-  composes, and the specialist lens definitions with their result contract. Preloaded into
+  composes, the specialist lens definitions with their result contract, and the two comment
+  templates it posts. Preloaded into
   ticket-gate through that agent's `skills:` frontmatter. Not a standalone workflow: it decides
   nothing, and the only rules it carries are the ones a lens itself obeys.
 ---
 
-<!-- ticket-gate-reference-version: 2 -->
+<!-- ticket-gate-reference-version: 3 -->
 
 # ticket-gate reference
 
@@ -97,3 +98,34 @@ the critic's prose contract), with `class` on each blocking item (fundamental /
 significant; the lens judges its own items). Step 3C's dispatch carries this contract
 verbatim, so the callee never depends on a copy that can drift. The MERGE rule for these results is a rule and
 lives in `ticket-gate.md` at Step 4, not here.
+
+## Comment templates
+
+Both are posted with `gh issue comment <NUMBER> --repo <repo> --body "$(cat <<'EOF' ... EOF)"`.
+WHEN each is used, and what blocks or proceeds after it, is decided in `ticket-gate.md`; these are
+the payloads only.
+
+**Clarification (Step 1.5, thin ticket).**
+
+```markdown
+## ticket-gate: clarification needed before review
+
+This ticket lacks enough implementation detail to review accurately. Please answer the
+following questions in the ticket body (not in comments) before re-running the gate:
+
+1. [Question 1]
+2. [Question 2]
+3. [Question 3 (up to 5 questions)]
+
+Answering in the body ensures the next gate run can review the complete spec.
+```
+
+**Remediation guide (Step 6, option 2).**
+
+```markdown
+## ticket-gate: remediation guide
+
+### <Blocking / Advisory>
+- [ ] <required change 1>
+- [ ] <required change 2>
+```

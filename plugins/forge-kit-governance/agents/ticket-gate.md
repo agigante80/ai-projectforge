@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 33 -->
+<!-- ticket-gate-version: 34 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -236,21 +236,7 @@ Launch a `general-purpose` sub-agent with the issue title and full body. Ask it 
 **Threshold:** If the sub-agent identifies 3+ unanswered questions that would materially
 change the review (not cosmetic style or wording questions), halt with BLOCKED:
 
-```bash
-gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "$(cat <<'EOF'
-## ticket-gate: clarification needed before review
-
-This ticket lacks enough implementation detail to review accurately. Please answer the
-following questions in the ticket body (not in comments) before re-running the gate:
-
-1. [Question 1]
-2. [Question 2]
-3. [Question 3 (up to 5 questions)]
-
-Answering in the body ensures the next gate run can review the complete spec.
-EOF
-)"
-```
+Post the CLARIFICATION template from the reference skill as a comment.
 
 Print: `BLOCKED - #<N> needs clarification before review. Questions posted as a comment.`
 **Do NOT proceed to Step 2.** Return immediately.
@@ -554,7 +540,22 @@ the optional `### Security lens` and `### Architecture alternatives` slots.
 
 ### Step 5: Post to GitHub
 
-**The review is permanent**, posted as a forge comment for the audit trail.
+**Two artifacts.** The full review stays a COMMENT, never edited: the audit trail, leaving
+the author's text alone. A short block ALSO goes in the BODY, because nothing reads a comment
+back: `forge_*` has no read-comments primitive, and humans triage bodies. Rewrite in place:
+
+```markdown
+<!-- gate-verdict:start -->
+### Gate verdict (round <N>)
+**Verdict:** PASS | NEEDS-WORK | BLOCKED
+- <class>: <blocking item>
+Full review: latest `ticket-gate` comment.
+<!-- gate-verdict:end -->
+```
+
+Computed fields only, so nothing can drift. **Body regions are disjoint and
+singly owned:** `gate-verdict` here, `### Required changes (gate)` at Step 6, `decision`
+for #129.
 
 ```bash
 gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "<review>"
@@ -616,17 +617,7 @@ Instead of auto-remediating, present severity-aware options and wait for user re
 (An advisory-only result is PASS and never reaches prompt mode; its follow-up-ticket option
 lives on the PASS path in Step 6.)
 
-**Option 2 (remediation guide):**
-```bash
-gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "$(cat <<'EOF'
-## ticket-gate: remediation guide
-
-### <Blocking / Advisory>
-- [ ] <required change 1>
-- [ ] <required change 2>
-EOF
-)"
-```
+**Option 2 (remediation guide):** post the REMEDIATION template from the reference skill.
 
 **Option 3 override (significant only).** Override is never available for a fundamental item:
 those reject the approach itself, so proceeding would build something the gate rejected.
