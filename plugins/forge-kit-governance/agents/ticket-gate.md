@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 31 -->
+<!-- ticket-gate-version: 32 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -276,7 +276,7 @@ justified, which label routing decides:
 
 | Lens | Trigger | Effect |
 |---|---|---|
-| Security specialist | label `security` OR `critical` | runs the Security lens (definition below) in addition to the critic; findings merge into the same review comment |
+| Security specialist | label `security` OR `critical` | runs the Security lens (defined in the reference skill) in addition to the critic; findings merge into the same review comment |
 | API-design brief | label `api` OR body matches `GET /\|POST /\|PUT /\|DELETE /\|routes/` | no extra agent: the critic's brief gains the API-design checklist (REST conventions, error-code consistency, contract clarity, could a client dev implement from the spec alone) |
 | Privacy regime | label `privacy` | no extra agent: Read `.claude/skills/privacy-regime/SKILL.md` and append its filled-in obligations to the critic's brief. Absent or unfilled, skip the row: rule 4 still binds |
 | `critical` | label `critical` | maximum scrutiny: the critic treats every brief section as blocking-capable and the security lens always runs |
@@ -289,7 +289,8 @@ justify their seat, and heterogeneous agent teams underperform their best single
 **Log the selection:** record which lenses run and why.
 
 **Adding project-specific lenses:** add a row to the table above with its trigger, and a
-lens definition section like the Security lens below. Prefer modulating the critic's brief
+lens definition section in the `ticket-gate-reference` skill alongside the Security lens
+(definitions go there, never here, so this file stays at its ratchet). Prefer modulating the critic's brief
 over adding an agent; add an agent only for a genuinely independent domain perspective.
 
 ### Step 2.7: Complexity assessment and specialist research
@@ -501,22 +502,24 @@ no-override rule included, fires for them like any other fundamental.
 ### Step 3C: Dispatch the lenses (only those Step 2.5 selected)
 
 For each selected lens, dispatch its agent with: the review packet (Step 3B), the critic's
-JSON from Step 3B, the result contract (verbatim, per the definition below), and its scope
+JSON from Step 3B, the result contract (verbatim, per its definition in the reference skill), and its scope
 for this round (round 1: the whole ticket within its
 brief; re-runs: see the lens-scope rule below). A lens named in the review's Review-set
 line MUST have been dispatched here; never print a lens that did not run.
 
 **Lens scope on a re-run.** The lens (when it ran) re-runs scoped to its OWN prior blocking items
 PLUS the changed sections that touch its brief (auth, validation, exposure): a clean round-1 lens
-does not mean round 2's edits are security-clean, and the net-new dedup rule never silences the
+does not mean round 2's edits are security-clean, and the net-new rule in its brief never silences the
 lens on its own scope. Skipping it leaves its findings verified by nobody with its brief;
 re-running it in full grows the target.
 
 ### Lens definitions
 
 The per-lens briefs and the shared result contract are in the preloaded
-`ticket-gate-reference` skill. They are DEFINITIONS, not rules: every rule governing how a
-lens result is merged, scoped or reported stays in this file.
+`ticket-gate-reference` skill. The dividing line is WHO obeys the rule, not whether one is
+present: a rule the LENS follows travels with its brief, because the brief is dispatched to
+it verbatim, while every rule the ORCHESTRATOR follows (when a lens runs, how its result is
+merged, what a re-run rescopes) stays in this file.
 
 ### Step 4: Compile the review
 
@@ -542,7 +545,9 @@ than any lens, so it stays here and the reference skill only points at it.
 Build a markdown review (never a numeric scorecard):
 
 Use the review template in the preloaded `ticket-gate-reference` skill VERBATIM, including
-the optional `### Security lens` and `### Architecture alternatives` slots.
+the optional `### Security lens` and `### Architecture alternatives` slots. If that skill is
+not loaded, STOP and report it rather than improvising a layout: Step 5 posts permanently,
+and a missing declared skill is skipped with only a debug-log warning.
 
 ### Step 5: Post to GitHub
 
