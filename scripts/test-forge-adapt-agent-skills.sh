@@ -197,6 +197,57 @@ cp "$T/block.md" "$T/mode.md"; chmod 644 "$T/mode.md"
 bash "$SCRIPT" --rewrite "$T/mode.md"
 eq "--rewrite preserves the file mode" "$(stat -c '%a' "$T/mode.md")" "644"
 
+# --- round 2: ONE normalisation, shared by parse and rewrite ------------------------------------
+# Three rounds of findings were all the same defect: parse and the rewrite branch each normalised
+# an item their own way and drifted. Round 1 found rewrite not unquoting at all; round 2 found it
+# unquoting BEFORE trimming, so a trailing space left a stray quote. They share norm() now, and
+# these cases pin both directions of that agreement.
+agent "$T/messy.md" <<'M'
+---
+name: a
+skills:
+  - "forge-kit-governance:gate-lenses" 
+  - privacy-regime  # the regime pack
+---
+body
+M
+eq "--names strips a trailing comment from a list item" \
+   "$(bash "$SCRIPT" --names "$T/messy.md" | tr '\n' ',')" "gate-lenses,privacy-regime,"
+bash "$SCRIPT" --rewrite "$T/messy.md"
+eq "--rewrite unquotes AFTER trimming, leaving no stray quote" \
+   "$(grep -c '"' "$T/messy.md")" "0"
+eq "--rewrite and --names agree on the rewritten file" \
+   "$(bash "$SCRIPT" "$T/messy.md" | tr '\n' ',')" "gate-lenses,privacy-regime,"
+
+# --- round 2: CRLF frontmatter must not silently disable the whole script -----------------------
+# forge-lib.sh already tolerates CRLF for the same reason. Without this, `---\r` fails the line-1
+# test, classify() never sees the field, and every mode prints nothing and exits 0: the exact
+# silent-empty outcome the refusal contract was added to remove.
+printf -- '---\r\nname: a\r\nskills:\r\n  - forge-kit-governance:gate-lenses\r\n---\r\nbody\r\n' > "$T/crlf.md"
+eq "CRLF frontmatter is parsed, not silently skipped" \
+   "$(bash "$SCRIPT" --names "$T/crlf.md")" "gate-lenses"
+
+# --- round 2: a bare `skills:` is YAML null, which genuinely means NO skills ---------------------
+# Deliberately NOT a refusal, unlike the plain-scalar case. `skills:` with no items is null, and
+# null and absent mean the same thing, so printing nothing is the correct answer rather than an
+# ambiguity. Pinned so the next round does not re-raise it.
+agent "$T/bare.md" <<'M'
+---
+name: a
+skills:
+tools: ["Bash"]
+---
+body
+M
+out=$(bash "$SCRIPT" "$T/bare.md"); rc=$?
+eq "a bare skills: (YAML null) prints nothing" "$out" ""
+eq "a bare skills: (YAML null) exits 0, it is not an unsupported shape" "$rc" "0"
+
+# --- round 2: the rewrite must stay ATOMIC as well as mode-preserving ---------------------------
+cp "$T/block.md" "$T/atomic.md"; chmod 600 "$T/atomic.md"
+bash "$SCRIPT" --rewrite "$T/atomic.md"
+eq "--rewrite preserves a non-default mode too" "$(stat -c '%a' "$T/atomic.md")" "600"
+
 # --- fail closed on a missing file, rather than printing nothing and exiting 0 -------------------
 err=$(bash "$SCRIPT" "$T/does-not-exist.md" 2>&1 >/dev/null); rc=$?
 eq "a missing agent file exits 2 (fail closed, not a silent empty list)" "$rc" "2"

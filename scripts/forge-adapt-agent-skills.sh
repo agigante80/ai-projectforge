@@ -38,10 +38,29 @@ esac
 f="${1-}"
 [ -n "$f" ] && [ -r "$f" ] || { echo "forge-adapt-agent-skills: cannot read agent file '${f:-<none>}'" >&2; exit 2; }
 
+# ONE normalisation, shared by every reader and by the rewriter. Three rounds of review found the
+# same defect three ways because `parse` and the rewrite branch each normalised an item their own
+# way and drifted: rewrite did not unquote at all, then it unquoted BEFORE trimming so a trailing
+# space left a stray quote, then a trailing comment leaked through the reader. Order matters, and
+# it is fixed here once: drop a trailing comment, trim, unquote, trim again (a quote can hide a
+# space). \047 is the single quote, written as an octal escape so this survives shell quoting.
+NORM='
+function norm(s) {
+  sub(/[[:space:]]+#.*$/, "", s)
+  gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+  gsub(/^["\047]|["\047]$/, "", s)
+  gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+  return s
+}
+'
+
 # Frontmatter is the block between the FIRST '---' on line 1 and the next '---'. A later '---' in
-# the body cannot reopen it, and a `skills:` line in the body is prose, not a declaration.
+# the body cannot reopen it, and a `skills:` line in the body is prose, not a declaration. CR is
+# stripped first: forge-lib.sh tolerates CRLF for the same reason, and without it `---\r` fails the
+# line-1 test and every mode goes silently empty, which is the outcome this script exists to remove.
 extract() {
   awk '
+    { sub(/\r$/, "") }
     NR == 1 { if ($0 != "---") exit; infm = 1; next }
     infm && /^---[[:space:]]*$/ { exit }
     infm { print }
@@ -53,6 +72,8 @@ extract() {
 # which is a worse outcome than the silent missing skill this script exists to prevent.
 #   supported: `skills:` followed by `  - name` lines, or `skills: [a, b]` closed on the SAME line.
 #   refused:   a multi-line flow list, a plain scalar, a block scalar, anything else.
+# A BARE `skills:` with no items is YAML null and is deliberately NOT refused: null and absent both
+# mean "no companion skills", so there is no ambiguity to report.
 classify() {
   extract "$1" | awk '
     /^skills:[[:space:]]*$/            { print "block"; seen = 1; exit }
@@ -62,27 +83,21 @@ classify() {
   '
 }
 
-# Both YAML shapes the field is written in: a block list, and an inline flow sequence.
 parse() {
-  awk '
+  awk "$NORM"'
     /^skills:[[:space:]]*\[/ {                       # inline: skills: [a, plugin:b]
       line = $0
       sub(/^skills:[[:space:]]*\[/, "", line)
       sub(/\].*$/, "", line)
       n = split(line, parts, ",")
-      for (i = 1; i <= n; i++) {
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[i])
-        gsub(/^["'"'"']|["'"'"']$/, "", parts[i])
-        if (parts[i] != "") print parts[i]
-      }
+      for (i = 1; i <= n; i++) { item = norm(parts[i]); if (item != "") print item }
       next
     }
     /^skills:[[:space:]]*$/ { inlist = 1; next }     # block: skills: then "  - name" lines
     inlist && /^[[:space:]]*-[[:space:]]*/ {
       item = $0
       sub(/^[[:space:]]*-[[:space:]]*/, "", item)
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", item)
-      gsub(/^["'"'"']|["'"'"']$/, "", item)
+      item = norm(item)
       if (item != "") print item
       next
     }
@@ -107,39 +122,38 @@ case "$mode" in
   names) extract "$f" | parse | bare ;;
   rewrite)
     tmp="$(mktemp "${TMPDIR:-/tmp}/forge-adapt-skills.XXXXXX")" || exit 2
-    # Rewrite only inside frontmatter, and only the identifiers themselves: every other key, and
-    # the whole body, must survive byte for byte.
-    awk '
-      NR == 1 && $0 == "---" { infm = 1; print; next }
-      infm && /^---[[:space:]]*$/ { infm = 0; print; next }
+    # `cp -p` FIRST so the temp file carries the agent's own mode, then overwrite its contents and
+    # `mv` it into place. mv alone would install mktemp's 0600, which no git diff would show; a
+    # plain `cat >` over the original would keep the mode but lose atomicity, leaving the agent
+    # half-written on an interrupt. This keeps both. One declared exception to leaving the file
+    # otherwise untouched: awk terminates every line, so a file with no trailing newline gains one.
+    cp -p "$f" "$tmp" || { rm -f "$tmp"; exit 2; }
+    awk "$NORM"'
+      { cr = sub(/\r$/, "") ? "\r" : "" }
+      NR == 1 && $0 == "---" { infm = 1; print $0 cr; next }
+      infm && /^---[[:space:]]*$/ { infm = 0; print $0 cr; next }
       infm && /^skills:[[:space:]]*\[/ {
         idx = index($0, "["); head = substr($0, 1, idx); rest = substr($0, idx + 1)
         cidx = index(rest, "]")
         body = substr(rest, 1, cidx - 1); tail = substr(rest, cidx)   # tail keeps ] and any comment
         n = split(body, parts, ","); out = ""
         for (i = 1; i <= n; i++) {
-          gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[i])
-          gsub(/^["'"'"']|["'"'"']$/, "", parts[i])
-          sub(/.*:/, "", parts[i])
-          if (parts[i] != "") out = out (out == "" ? "" : ", ") parts[i]
+          item = norm(parts[i]); sub(/.*:/, "", item)
+          if (item != "") out = out (out == "" ? "" : ", ") item
         }
-        print head out tail; next
+        print head out tail cr; next
       }
-      infm && /^skills:[[:space:]]*$/ { inlist = 1; print; next }
+      infm && /^skills:[[:space:]]*$/ { inlist = 1; print $0 cr; next }
       infm && inlist && /^[[:space:]]*-[[:space:]]*/ {
         item = $0
         sub(/^[[:space:]]*-[[:space:]]*/, "", item)
         prefix = substr($0, 1, length($0) - length(item))   # preserve the exact indentation
-        gsub(/^["'"'"']|["'"'"']$/, "", item)
-        sub(/.*:/, "", item)
-        print prefix item; next
+        item = norm(item); sub(/.*:/, "", item)
+        print prefix item cr; next
       }
       infm && inlist && /^[^[:space:]]/ { inlist = 0 }
-      { print }
+      { print $0 cr }
     ' "$f" > "$tmp" || { rm -f "$tmp"; exit 2; }
-    # Truncate in place rather than `mv`: mv would install mktemp's 0600 over the agent's own mode,
-    # and a mode change does not show up in a git diff.
-    cat "$tmp" > "$f" || { rm -f "$tmp"; exit 2; }
-    rm -f "$tmp"
+    mv "$tmp" "$f" || { rm -f "$tmp"; exit 2; }
     ;;
 esac

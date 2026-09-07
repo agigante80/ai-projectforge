@@ -28,7 +28,7 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
    python3 scripts/test-hooks.py               # behavioural contract tests for the hooks
    bash scripts/test-template-lockstep.sh      # contract test for the lockstep guard above
    bash scripts/test-forge-adapt-catalogue.sh  # contract test for the forge-adapt catalogue script
-bash scripts/test-forge-adapt-agent-skills.sh # contract test for the agent companion-skill resolver
+   bash scripts/test-forge-adapt-agent-skills.sh # contract test for the agent companion-skill resolver
    bash scripts/test-forge-lib.sh              # contract test for the forge-host adapter (stubbed transport)
    bash scripts/test-update-component-index.sh # contract test for the component-index generator
    python3 scripts/update-component-index.py --check  # fail if the generated inventory regions are stale
@@ -78,7 +78,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 
 | Plugin group | Version | Contents |
 |---|---|---|
-| `forge-kit-adapt` | 0.4.1 | skill: adapt |
+| `forge-kit-adapt` | 0.4.2 | skill: adapt |
 | `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
 | `forge-kit-devops` | 0.9.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.7.20 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard |

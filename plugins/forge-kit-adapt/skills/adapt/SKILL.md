@@ -13,7 +13,7 @@ description: >
   Backward-compatible: also triggered by "upgrade-audit".
 ---
 
-<!-- forge-adapt-version: 53 -->
+<!-- forge-adapt-version: 54 -->
 
 # forge-adapt
 
@@ -439,9 +439,10 @@ For each chosen component, read the forge-kit template, rewrite it for this proj
      `forge.conf.example` -> `.forge.conf`. Its base URL and token-env name cannot be auto-detected,
      so ASK for them (or read an existing `.forge.conf`), and remind the user to export the token.
    - **Companion skills (agents only):** an agent carries reference material in a SKILL named in its
-     `skills:` frontmatter, never its own `references/` (issue #124; the script header says why).
-     Install each skill named, then rewrite the installed agent LAST, while the plugin-scoped names
-     are still readable. **A missed skill fails SILENTLY**, so do not parse the frontmatter yourself:
+     `skills:` frontmatter, never its own `references/` (#124). Install each skill named, then
+     rewrite the installed agent LAST, while the plugin-scoped names are still readable. **A missed
+     skill fails SILENTLY**, so never parse the frontmatter yourself; on exit 2 STOP and
+     report it:
 
      ```bash
      "$FORGE_KIT_DIR"/scripts/forge-adapt-agent-skills.sh --names "$FORGE_KIT_DIR/plugins/<group>/agents/<name>.md"
