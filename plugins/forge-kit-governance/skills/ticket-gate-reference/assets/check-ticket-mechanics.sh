@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-ticket-mechanics-version: 2
+# check-ticket-mechanics-version: 3
 #
 # Step 3A's mechanical checks, as a script rather than as prose for the agent to read (#149).
 #
@@ -99,6 +99,7 @@ template_fields() {
     }
     /^      label: / { if (type != "markdown" && label == "") { l = substr($0, 14); sub(/[ \t]+$/, "", l); label = l } }
     /^      required: / { r = $0; sub(/^.*required:[[:space:]]*/, "", r); gsub(/[[:space:]]/, "", r); req = r }
+    /^          required: true/ { req = "true" }   # a checkboxes group with a required option
     END { if (label != "") { print label "\t" (req == "true" ? "yes" : "no") } }
   ' "$TEMPLATE"
 }
@@ -108,11 +109,24 @@ TEMPLATE_FIELDS="$(template_fields)"
 # first version reported `sections pass` here, a fail-open on the one check that reads it.
 [ -n "$TEMPLATE_FIELDS" ] || die "no fields parsed from template: $TEMPLATE"
 
-# Which rendered section plays each role, by label shape rather than by a fixed name. An empty
-# answer means the template does not carry that section, and the matching check is then `na`.
+# Which rendered section plays each role, by label shape rather than by a fixed name.
+#
+# AN UNRESOLVED ROLE IS `referred`, NEVER `na`. The script cannot tell "this template does not
+# ask for E2E specs" from "this template calls it something my regex misses", and treating the
+# second as `na` is a fail-open: a project template naming its sections differently would score
+# every check `na` and the gate would PASS having checked nothing. `referred` costs a little
+# noise on the three templates that genuinely carry no test sections, and `referred` never
+# blocks, so the trade is one the critic can absorb and a silent pass is not.
 role_label() {
   printf '%s\n' "$TEMPLATE_FIELDS" | cut -f1 | grep -m1 -iE "$1" || true
 }
+role_required() {
+  [ -n "$1" ] || return 1
+  printf '%s\n' "$TEMPLATE_FIELDS" | awk -F'\t' -v l="$1" '$1 == l { print $2; exit }' | grep -q yes
+}
+# An OPTIONAL section left empty is what GitHub renders for a field the template did not demand,
+# so it is `na`, not a failure. Check 3 was fixed for this; checks 4 to 6 had the same bug.
+empty_outcome() { if role_required "$1"; then echo fail; else echo na; fi; }
 SCENARIOS_LABEL="$(role_label 'given.*when.*then')"
 UNIT_LABEL="$(role_label 'unit test')"
 E2E_LABEL="$(role_label 'e2e|end.to.end')"
@@ -125,7 +139,10 @@ DOCS_LABEL="$(role_label 'documentation impact')"
 if [ -z "$CURRENT_TPL_VERSION" ]; then
   row template_version na "no versioned templates in this project"
 elif ! is_num "$CURRENT_TPL_VERSION"; then
-  die "--current-tpl-version is not a number: $CURRENT_TPL_VERSION"
+  # A fail ROW, not a die: exiting here would give the gate "could not run", which it turns into
+  # all six checks referred, so one stray match in 0a's template scan would silently disable
+  # every mechanical check. The sibling --tpl-version case is a row for the same reason.
+  row template_version fail "current template version is not a number: $CURRENT_TPL_VERSION"
 elif [ -z "$TPL_VERSION" ]; then
   row template_version fail "no template-version marker in body (current: v$CURRENT_TPL_VERSION)"
 elif ! is_num "$TPL_VERSION"; then
@@ -186,11 +203,11 @@ fi
 # --- check 4: GWT structure (rule 1, the checkable half) --------------------------------
 # WHICH conditions are independent is the critic's judgment, never this check's.
 if [ -z "$SCENARIOS_LABEL" ]; then
-  row gwt na "template carries no Given/When/Then section"
+  row gwt referred "no section matched Given/When/Then; the critic must judge rule 1 unaided"
 else
   SCENARIOS="$(section_of "$SCENARIOS_LABEL")"
   if ! has_content "$SCENARIOS"; then
-    row gwt fail "no content in $SCENARIOS_LABEL"
+    row gwt "$(empty_outcome "$SCENARIOS_LABEL")" "no content in $SCENARIOS_LABEL"
   else
     pos_count=$(printf '%s\n' "$SCENARIOS" | grep -cE '^[[:space:]]*\**Positive\**[[:space:]]*$')
     neg_count=$(printf '%s\n' "$SCENARIOS" | grep -cE '^[[:space:]]*\**Negative\**[[:space:]]*$')
@@ -248,13 +265,13 @@ names_path() { printf '%s' "$1" | grep -qE '`[^`]*/[^`]*`|[A-Za-z0-9_-]+\.(ts|ts
 long_enough() { [ "$(printf '%s' "$1" | tr -d '[:space:]' | wc -c)" -gt 12 ]; }
 
 if [ -z "$UNIT_LABEL" ]; then
-  row unit_tests na "template carries no unit-test section"
+  row unit_tests referred "no section matched unit tests; the critic must judge rule 2 unaided"
 else
   UNIT="$(section_of "$UNIT_LABEL")"
   # N/A is tested BEFORE a path, here and in the E2E branch below, so the two cannot disagree:
   # an N/A that happens to cite a path is still an N/A claim for the critic to rule on.
   if ! has_content "$UNIT"; then
-    row unit_tests fail "no content in $UNIT_LABEL"
+    row unit_tests "$(empty_outcome "$UNIT_LABEL")" "no content in $UNIT_LABEL"
   elif looks_na "$UNIT"; then
     row unit_tests referred "unit tests claim N/A; legitimate only where rule 2 is out of scope: $(first_line "$UNIT")"
   elif names_path "$UNIT"; then
@@ -265,11 +282,11 @@ else
 fi
 
 if [ -z "$E2E_LABEL" ]; then
-  row e2e_tests na "template carries no E2E section"
+  row e2e_tests referred "no section matched E2E; the critic must judge rule 3 unaided"
 else
   E2E="$(section_of "$E2E_LABEL")"
   if ! has_content "$E2E"; then
-    row e2e_tests fail "no content in $E2E_LABEL"
+    row e2e_tests "$(empty_outcome "$E2E_LABEL")" "no content in $E2E_LABEL"
   elif looks_na "$E2E"; then
     # Whether the ticket touches UI at all (rule 3), is Step 3B's call, so a reasoned N/A is
     # referred rather than passed, and an unreasoned one fails.
@@ -288,11 +305,11 @@ fi
 # --- check 6: documentation impact present ----------------------------------------------
 # Presence only. Whether a "none" reason HOLDS is rule 7, judged by the critic.
 if [ -z "$DOCS_LABEL" ]; then
-  row docs_impact na "template carries no documentation-impact section"
+  row docs_impact referred "no section matched documentation impact; rule 7 is the critic's"
 else
   DOCS="$(section_of "$DOCS_LABEL")"
   if ! has_content "$DOCS"; then
-    row docs_impact fail "no content in $DOCS_LABEL"
+    row docs_impact "$(empty_outcome "$DOCS_LABEL")" "no content in $DOCS_LABEL"
   elif names_path "$DOCS"; then
     row docs_impact pass "$(first_line "$DOCS")"
   elif printf '%s' "$DOCS" | grep -qiE 'none|no doc'; then

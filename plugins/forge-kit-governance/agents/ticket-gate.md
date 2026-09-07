@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 42 -->
+<!-- ticket-gate-version: 43 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -348,27 +348,22 @@ project files.
 
 ### Step 3A: Mechanical checks (deterministic, no agent)
 
-Run the script that ships with the `ticket-gate-reference` skill. Do NOT re-implement its checks
-in prose: they were prose until #149, they are the kit's highest-traffic deterministic surface,
-and prose cannot be tested.
+Run the script the `ticket-gate-reference` skill ships. Do NOT re-implement its checks in prose:
+prose cannot be tested (#149).
 
 ```bash
-scripts/check-ticket-mechanics.sh \
-  --body <body-file> --template <the type's template file> \
+MECH=scripts/check-ticket-mechanics.sh                 # forge-adapt install
+[ -f "$MECH" ] || MECH="$CLAUDE_PLUGIN_ROOT/skills/ticket-gate-reference/assets/${MECH#scripts/}"
+"$MECH" --body <body-file> --template <the type's template file> \
   --tpl-version <marker from the body> --current-tpl-version <0a's value> --labels <0b's labels>
 ```
 
-Copied to `scripts/` by forge-adapt (path may vary); under a plugin install it ships beside the
-`ticket-gate-reference` skill. It emits one TSV row per check, `<check>\t<outcome>\t<evidence>`,
-and exits non-zero ONLY when it could not run. If it is absent or exits non-zero, record every
-check as `referred`, say so in the review, and continue: improvising the checks is what #149
-removed.
+It emits one TSV row per check, `<check>\t<outcome>\t<evidence>`, and exits non-zero ONLY when it
+could not run. If it is absent or fails, record every check as `referred` and say so: improvising
+them is what #149 removed.
 
-An `na` row means the TEMPLATE carries no such section, not that the ticket omitted one: the six
-work templates do not share a section set, and only `feature` and `bug` ask for E2E specs. Never
-treat `na` as a gap in the ticket.
-
-Outcomes are **pass**, **fail**, **warn**, **na**, or **referred**. **Every FAIL becomes a blocking
+Outcomes are **pass**, **fail**, **warn**, **na** (did not apply), or **referred** (the script
+could not rule). Neither is a defect in the ticket. **Every FAIL becomes a blocking
 item, classified significant** (fundamental only ever comes from the critic or the lens, never from
 mechanics), merged into the blocking list before Step 6 runs: a mechanical failure must never be
 lost to a clean critic. Warn, N/A, and referred never block; a referred item blocks only if the

@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 14 -->
+<!-- doc-rules-version: 15 -->
 
 # Ticket standards (canonical)
 
@@ -204,6 +204,14 @@ can still fork silently, so do not create more of them.
 <!-- restatement-allow: Step 2.5 :: rule 4 :: routing row for the optional
      privacy-regime skill; it states no bar of its own and only notes that rule 4 still binds when
      the skill is absent -->
+
+<!-- restatement-allow: check-ticket-mechanics.sh (top) :: rule 1 :: the row emitted when NO
+     section matched Given/When/Then; it hands the rule to the critic unjudged and states no bar
+     of its own, which is the opposite of a restatement -->
+<!-- restatement-allow: check-ticket-mechanics.sh (top) :: rule 2 :: same shape, for an
+     unmatched unit-test section -->
+<!-- restatement-allow: check-ticket-mechanics.sh (top) :: rule 3 :: same shape, for an
+     unmatched E2E section -->
 
 Editing rule 5 or rule 1 therefore means editing the gate in the same change. The list used to
 claim the hard-fail bars were the *only* exception, which was false, so a maintainer editing rule 5

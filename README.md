@@ -84,7 +84,7 @@ the repo actually ships. Versions are the per-component `<name>-version` markers
 
 | Plugin group | Type | Component | Version | Words | What it does |
 |---|---|---|---|---:|---|
-| `forge-kit-adapt` | skill | `adapt` | v57 | 7313 | Analyse the current project and recommend the forge-kit components that fit it - subagents, skills, commands, and hooks… |
+| `forge-kit-adapt` | skill | `adapt` | v58 | 7316 | Analyse the current project and recommend the forge-kit components that fit it - subagents, skills, commands, and hooks… |
 | `forge-kit-backend` | skill | `api-design-principles` | v1 | 1470 | Master REST and GraphQL API design principles to build intuitive, scalable, and maintainable APIs that delight develope… |
 | `forge-kit-backend` | skill | `architecture-patterns` | v1 | 1330 | Implement proven backend architecture patterns including Clean Architecture, Hexagonal Architecture, and Domain-Driven… |
 | `forge-kit-backend` | skill | `cqrs-implementation` | v1 | 1411 | Implement Command Query Responsibility Segregation for scalable architectures. |
@@ -103,7 +103,7 @@ the repo actually ships. Versions are the per-component `<name>-version` markers
 | `forge-kit-devops` | shell asset | `release-run` | v1 |  | release-run.sh: the shared side-effecting driver for the auto-release lanes (B and C). |
 | `forge-kit-devops` | shell asset | `sync-labels` | v8 |  | sync-labels.sh: make the host's labels match `.github/labels.yml`, or report that they do not. |
 | `forge-kit-devops` | shell asset | `version-lib` | v1 |  | version-lib.sh: the shared release primitive. |
-| `forge-kit-governance` | agent | `ticket-gate` | v42 | 5269 | Ticket readiness gate - deterministic mechanical checks plus ONE critical-review pass (verdict, per-section pushback, G… |
+| `forge-kit-governance` | agent | `ticket-gate` | v43 | 5211 | Ticket readiness gate - deterministic mechanical checks plus ONE critical-review pass (verdict, per-section pushback, G… |
 | `forge-kit-governance` | command | `gate-ticket` | v6 | 197 | Run the ticket readiness gate on a forge issue (GitHub or self-hosted Forgejo, where the ticket-gate agent detects the… |
 | `forge-kit-governance` | skill | `closing-sessions` | v2 | 671 | Persist what mattered from the current conversation before the session ends or context is lost. |
 | `forge-kit-governance` | skill | `ticket-gate-reference` | v8 | 1096 | Reference material the ticket-gate agent reads once per run: the review output template it composes, the specialist len… |
@@ -111,7 +111,7 @@ the repo actually ships. Versions are the per-component `<name>-version` markers
 | `forge-kit-governance` | hook | `block-dashes` | v5 |  | Canonical forge-kit PreToolUse hook: block the unicode em dash (U+2014) and en dash (U+2013) from being written into fi… |
 | `forge-kit-governance` | hook | `overnight-continue` | v1 |  | Stop hook for the working-overnight run. |
 | `forge-kit-governance` | hook | `overnight-guard` | v3 |  | PreToolUse Bash guard for an armed working-overnight run. |
-| `forge-kit-governance` | shell asset | `check-ticket-mechanics` | v2 |  | Step 3A's mechanical checks, as a script rather than as prose for the agent to read (#149). |
+| `forge-kit-governance` | shell asset | `check-ticket-mechanics` | v3 |  | Step 3A's mechanical checks, as a script rather than as prose for the agent to read (#149). |
 | `forge-kit-review` | agent | `architect-review` | v1 | 1047 | Master software architect specializing in modern architecture patterns, clean architecture, microservices, event-driven… |
 | `forge-kit-review` | agent | `backend-architect` | v1 | 2232 | Expert backend architect specializing in scalable API design, microservices architecture, and distributed systems. |
 | `forge-kit-review` | agent | `code-reviewer` | v11 | 1588 | Elite code review expert for security vulnerabilities, correctness bugs, performance, and maintainability. |

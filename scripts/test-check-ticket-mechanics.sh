@@ -32,17 +32,17 @@ expect() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (expected $2, got '$3'
 cat > "$WORK/gen.py" <<'PY'
 import re, sys
 def fields(path):
-    out=[]; type_=None; label=None; req="false"
+    out=[]; type_=None; label=None; req="false"; kind=None
     for line in open(path):
         m=re.match(r'\s*-\s*type:\s*(\S+)', line)
         if m:
-            if label: out.append((label, req=="true"))
-            type_=m.group(1); label=None; req="false"; continue
+            if label: out.append((label, req=="true", kind))
+            type_=m.group(1); label=None; req="false"; kind=type_; continue
         m=re.match(r'      label: (.*)$', line)
         if m and type_!="markdown" and label is None: label=m.group(1).rstrip()
         m=re.match(r'      required: (\S+)', line)
         if m: req=m.group(1)
-    if label: out.append((label, req=="true"))
+    if label: out.append((label, req=="true", kind))
     return out
 GWT = sys.argv[3] if len(sys.argv) > 3 else """**Condition: login**
 
@@ -66,8 +66,10 @@ def content(label, required):
     if 'documentation impact' in l: return DOCS
     return "filled in" if required else "_No response_"
 body = ["<!-- template-version: 6 -->", ""]
-for label, req in fields(sys.argv[1]):
-    body += ["### " + label, "", content(label, req), ""]
+for label, req, kind in fields(sys.argv[1]):
+    # GitHub renders a checkboxes group as list items, never as `_No response_`.
+    c = "- [x] acknowledged" if kind == "checkboxes" else content(label, req)
+    body += ["### " + label, "", c, ""]
 open(sys.argv[2], "w").write("\n".join(body))
 PY
 
@@ -88,14 +90,73 @@ echo "check-ticket-mechanics: a compliant ticket passes on EVERY template"
 for tpl in feature bug security design infrastructure; do
   B="$(mkbody "$tpl" "ok-$tpl.md")"
   out="$(run "$B" "$tpl")"
-  offenders="$(printf '%s\n' "$out" | awk -F'\t' '$2 != "pass" && $2 != "na" { printf "%s=%s ", $1, $2 }')"
-  [ -z "$offenders" ] && ok "$tpl: no spurious fail or refer" || bad "$tpl: $offenders"
+  offenders="$(printf '%s\n' "$out" | awk -F'\t' '$2 == "fail" { printf "%s=%s ", $1, $2 }')"
+  [ -z "$offenders" ] && ok "$tpl: no spurious FAIL on a compliant ticket" || bad "$tpl: $offenders"
 done
+# An unresolved role is REFERRED, never `na`: the script cannot tell "this template does not ask
+# for E2E specs" from "this template names it something my regex misses", and scoring the second
+# `na` would let a project with differently-named sections PASS having checked nothing.
 B="$(mkbody security "sec.md")"
-expect "a template with no E2E section reports na, not fail" na "$(outcome "$(run "$B" security)" e2e_tests)"
+expect "a template with no E2E section refers, never fails" referred "$(outcome "$(run "$B" security)" e2e_tests)"
 B="$(mkbody design "des.md")"
-expect "a template with no unit-test section reports na, not fail" na "$(outcome "$(run "$B" design)" unit_tests)"
+expect "a template with no unit-test section refers, never fails" referred "$(outcome "$(run "$B" design)" unit_tests)"
 expect "a template with no unit or E2E section still judges GWT" pass "$(outcome "$(run "$B" design)" gwt)"
+# REGRESSION for the fail-open this replaced.
+cat > "$WORK/odd.yml" <<'ODD'
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+ODD
+printf '<!-- template-version: 6 -->\n\n### Summary\n\nsomething\n' > "$WORK/odd.md"
+odd="$(bash "$SCRIPT" --body "$WORK/odd.md" --template "$WORK/odd.yml" --tpl-version 6 --current-tpl-version 6 --labels backend,feature)"
+[ "$(printf '%s\n' "$odd" | awk -F'\t' '$2 == "na" { n++ } END { print n+0 }')" -eq 0 ] \
+  && ok "REGRESSION: an unrecognised template scores no check 'na', so it cannot pass unchecked" \
+  || bad "an unrecognised template still produces na rows"
+[ "$(printf '%s\n' "$odd" | awk -F'\t' '$2 == "referred" { n++ } END { print n+0 }')" -eq 4 ] \
+  && ok "REGRESSION: all four role checks refer to the critic instead" \
+  || bad "expected four referred rows on an unrecognised template"
+
+echo "check-ticket-mechanics: the parser, against a hand-written oracle"
+# gen.py's parser is a transliteration of the script's awk, so the two would mis-read any
+# template shape identically and the suite would agree with the bug. This list is written by
+# hand from feature.yml, so a shared misreading has something to disagree with.
+expected_fields="Summary|yes
+Priority|yes
+Affected areas|yes
+Files to create/modify|no
+Implementation details|no
+Acceptance criteria|yes
+Personal data handling|yes
+Security considerations|yes
+Dependencies|no
+Test scenarios (Given / When / Then)|yes
+Unit tests|yes
+Required reviews (mandatory)|yes
+QA & Security testing|yes
+E2E test scenarios|yes
+Documentation impact|yes
+Codebase Context|no"
+actual_fields="$(awk '
+  /^[[:space:]]*-[[:space:]]*type:[[:space:]]*/ {
+    if (label != "") { print label "|" (req == "true" ? "yes" : "no") }
+    t = $0; sub(/^.*type:[[:space:]]*/, "", t); gsub(/[[:space:]]/, "", t)
+    type = t; label = ""; req = "false"; next
+  }
+  /^      label: / { if (type != "markdown" && label == "") { l = substr($0, 14); sub(/[ \t]+$/, "", l); label = l } }
+  /^      required: / { r = $0; sub(/^.*required:[[:space:]]*/, "", r); gsub(/[[:space:]]/, "", r); req = r }
+  /^          required: true/ { req = "true" }
+  END { if (label != "") { print label "|" (req == "true" ? "yes" : "no") } }
+' "$TPLDIR/feature.yml")"
+if [ "$expected_fields" = "$actual_fields" ]; then
+  ok "the field parser matches a hand-written reading of feature.yml"
+else
+  bad "field parser disagrees with the hand-written oracle:"
+  diff <(printf '%s\n' "$expected_fields") <(printf '%s\n' "$actual_fields") | sed 's/^/      /'
+fi
 
 echo "check-ticket-mechanics: sections and GitHub's _No response_"
 B="$(mkbody feature "sec3.md")"
@@ -104,6 +165,36 @@ sed '/^### Acceptance criteria$/{n;n;s/^filled in$/_No response_/}' "$B" > "$WOR
 expect "a REQUIRED field left as _No response_ fails" fail "$(outcome "$(run "$WORK/reqempty.md" feature)" sections)"
 grep -v '^### Acceptance criteria$' "$B" > "$WORK/nohead.md"
 expect "an absent heading fails" fail "$(outcome "$(run "$WORK/nohead.md" feature)" sections)"
+
+# A template whose test section is OPTIONAL. Check 3 was fixed to honour `required`; checks 4 to 6
+# had the same bug, so an empty optional section produced `sections pass` beside `e2e_tests fail`
+# on a ticket GitHub accepted.
+cat > "$WORK/opt.yml" <<'OPT'
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: textarea
+    id: e2e
+    attributes:
+      label: E2E test scenarios
+    validations:
+      required: false
+OPT
+printf '<!-- template-version: 6 -->\n\n### Summary\n\nsomething\n\n### E2E test scenarios\n\n_No response_\n' > "$WORK/opt.md"
+optout="$(bash "$SCRIPT" --body "$WORK/opt.md" --template "$WORK/opt.yml" --tpl-version 6 --current-tpl-version 6 --labels backend,feature)"
+expect "an OPTIONAL section left empty is na, not fail" na "$(outcome "$optout" e2e_tests)"
+expect "and check 3 still passes it" pass "$(outcome "$optout" sections)"
+
+# A checkboxes group is required when any of its options is, and that `required` nests deeper than
+# a field's own. Tested through behaviour, since the parser is internal.
+cbout="$(run "$(mkbody feature "cb.md")" feature)"
+expect "a checkboxes group renders as items, not _No response_" pass "$(outcome "$cbout" sections)"
+sed '/^### Required reviews (mandatory)$/{n;n;s/^.*$/_No response_/}' "$WORK/cb.md" > "$WORK/cbempty.md"
+expect "REGRESSION: an empty REQUIRED checkboxes group fails check 3" fail "$(outcome "$(run "$WORK/cbempty.md" feature)" sections)"
 
 echo "check-ticket-mechanics: template version"
 expect "current version passes" pass "$(outcome "$(run "$B" feature)" template_version)"
@@ -117,6 +208,14 @@ o="$(bash "$SCRIPT" --body "$B" --template "$TPLDIR/feature.yml" --tpl-version "
 expect "a missing marker fails" fail "$(outcome "$o" template_version)"
 o="$(bash "$SCRIPT" --body "$B" --template "$TPLDIR/feature.yml" --tpl-version "6 7" --current-tpl-version 6 --labels "backend,feature")"
 expect "REGRESSION: a non-numeric marker fails, never falls through to pass" fail "$(outcome "$o" template_version)"
+# A die here would give the gate "could not run", which it turns into ALL checks referred, so one
+# stray match in Step 0a's template scan would silently disable every mechanical check.
+o="$(bash "$SCRIPT" --body "$B" --template "$TPLDIR/feature.yml" --tpl-version 6 --current-tpl-version "6 7" --labels "backend,feature")"
+rc=$?
+expect "REGRESSION: a non-numeric CURRENT version is a fail row, not a die" fail "$(outcome "$o" template_version)"
+[ "$rc" -eq 0 ] && [ "$(printf '%s\n' "$o" | wc -l | tr -d ' ')" -eq 7 ] \
+  && ok "REGRESSION: and the other six checks still run" \
+  || bad "a non-numeric current version suppressed the other checks"
 
 echo "check-ticket-mechanics: labels, against docs/guides/labels.md"
 lbl() { bash "$SCRIPT" --body "$B" --template "$TPLDIR/feature.yml" --tpl-version 6 --current-tpl-version 6 --labels "$1" | awk -F'\t' '$1=="labels"{print $2}'; }
