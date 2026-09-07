@@ -41,7 +41,10 @@ Create the issue with this body:
 ## Problem
 M
 out=$(bash "$SCRIPT" "$T/dirty" 2>&1); rc=$?
-[ "$rc" -ne 0 ] && ok "a hardcoded digit stamp fails the build" || bad "digit stamp fails"
+# EXACTLY 1. The guard documents 0 clean / 1 violation / 2 could-not-scan, and this suite is the
+# only thing certifying that contract, so "non-zero" would let a violation report as a scan error.
+[ "$rc" -eq 1 ] && ok "a hardcoded digit stamp exits 1, the violation status" \
+  || bad "digit stamp exits 1 (got $rc)"
 case "$out" in *dep-auditor.md*) ok "and it names the offending file" ;;
                *) bad "names the file (got: $out)" ;; esac
 case "$out" in *"template-version: 4"*) ok "and quotes the stamp it found" ;;
@@ -104,6 +107,32 @@ M
   chmod 755 "$T/unreadable/g/secret"
   [ "$rc" -eq 2 ] && ok "an unreadable subtree fails closed rather than passing clean" \
     || bad "unreadable subtree fails closed (rc=$rc)"
+fi
+
+# --- round 2: a hostile TMPDIR must not turn a violation into a clean pass ----------------------
+# The first version wrote grep's stderr to a mktemp file. With TMPDIR unusable, mktemp failed, the
+# redirect failed, grep never ran, and its status was read as "clean tree": the guard printed
+# success with a violation sitting in the tree. There is no temp file any more, and this pins it.
+out=$(TMPDIR=/nonexistent-on-purpose bash "$SCRIPT" "$T/dirty" 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "a violation is still caught when TMPDIR is unusable" \
+  || bad "hostile TMPDIR does not mask a violation (rc=$rc)"
+
+# --- round 2: a scan error must not HIDE a violation already found ------------------------------
+# grep exits 2 on a read error even when it matched elsewhere, and discarding the hits meant an
+# unreadable subtree reported "could not scan" while saying nothing about the stamp it had found.
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  skip: partial-scan case (running as root, which can read anything)"
+else
+  mk "$T/partial/g/agents/a.md" <<'M'
+<!-- template-version: 7 -->
+M
+  mkdir -p "$T/partial/g/locked"; printf 'x\n' > "$T/partial/g/locked/y.md"
+  chmod 000 "$T/partial/g/locked"
+  out=$(bash "$SCRIPT" "$T/partial" 2>&1); rc=$?
+  chmod 755 "$T/partial/g/locked"
+  [ "$rc" -ne 0 ] && ok "a partial scan still fails" || bad "partial scan fails (rc=$rc)"
+  case "$out" in *"template-version: 7"*) ok "and it still reports the violation it did find" ;;
+                 *) bad "a scan error must not hide a found violation (got: $out)" ;; esac
 fi
 
 # --- the real repo must pass, or the guard is not actually adopted -------------------------------

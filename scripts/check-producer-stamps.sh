@@ -33,14 +33,18 @@ fi
 # clean tree (a project may legitimately ship no producers), anything else a READ ERROR. Collapsing
 # them with `|| true` made an unreadable subtree containing an offending producer pass clean, which
 # is the same vacuous pass the missing-root check exists to prevent.
-err="$(mktemp)"; trap 'rm -f "$err"' EXIT
-hits="$(grep -rnE 'template-version:[[:space:]]*[0-9]' "$ROOT" 2>"$err")"; grc=$?
+#
+# grep's own stderr is deliberately NOT captured. Routing it through a mktemp file reintroduced
+# exactly that vacuous pass by a different door: with TMPDIR unusable, mktemp failed, the redirect
+# failed, grep never ran, and status 1 read as "clean" while a violation sat in the tree. Letting
+# stderr through needs no temp file, and CI shows it either way.
+hits="$(grep -rnE 'template-version:[[:space:]]*[0-9]' "$ROOT")"; grc=$?
 
-if [ "$grc" -gt 1 ]; then
-  echo "check-producer-stamps: could not scan '$ROOT' (grep exit $grc)" >&2
-  sed 's|^|  |' "$err" >&2
-  exit 2
-fi
+# A scan error is reported AFTER any hits, never instead of them: grep exits 2 on a read error even
+# when it matched elsewhere, so discarding what it found would hide a real violation behind an
+# unrelated permissions problem.
+scan_failed=0
+[ "$grc" -gt 1 ] && scan_failed=1
 
 if [ -n "$hits" ]; then
   echo "check-producer-stamps: hardcoded template-version stamp(s) found." >&2
@@ -52,7 +56,13 @@ A component that emits a ticket body must resolve the CURRENT version at runtime
 (read it from the issue-template dir), never write the number. Prose referring to the
 marker uses the N form: <!-- template-version: N -->.
 MSG
+  [ "$scan_failed" -eq 1 ] && echo "NOTE: part of the tree could not be read (grep exit $grc); there may be more." >&2
   exit 1
+fi
+
+if [ "$scan_failed" -eq 1 ]; then
+  echo "check-producer-stamps: could not scan all of '$ROOT' (grep exit $grc); see the error above." >&2
+  exit 2
 fi
 
 n="$(find "$ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')"
