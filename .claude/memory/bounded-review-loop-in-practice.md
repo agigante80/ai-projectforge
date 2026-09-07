@@ -1,6 +1,6 @@
 ---
 name: bounded-review-loop-in-practice
-description: Fired 5 times now; close out by fixing merge-blockers only and ticketing the rest, say so in the commit, verify the reviewer's claims, and unify a rule found in three faces
+description: Fired 6 times now; close out by fixing merge-blockers only and ticketing the rest, say so in the commit, verify the reviewer's claims, unify a rule found in three faces, and enumerate the domain when a round falsifies a universal claim
 metadata:
   type: feedback
 ---
@@ -45,5 +45,28 @@ Two of round 3's findings were also regressions from my own earlier fixes, inclu
 falsified a claim in the previous commit message (an atomicity fix that was not atomic, because the
 temp file was in TMPDIR rather than beside the target). Fix those in the close-out even when they
 are low severity: a false claim left standing in the history is worse than the bug it describes.
+
+**Fired a sixth time on 2026-09-07** (PR #144, the gate-verdict body block), at round 3, and it
+named the mechanism behind the injection rather than another instance of it: **a round that fixes
+a false claim tends to fix it against the one counterexample the review supplied, and ships a claim
+that is still false.**
+
+Round 1 wrote "this step is the body's only writer." Round 2 found it false, and corrected it to
+"the only writer after the Step 1 fetch," naming the single writer the report had named. Round 3
+found a third writer, so the corrected claim was false for the same reason as the original. Two
+rounds asserted an invariant about a set without enumerating the set. The fix that held was to
+count: three steps write the body, each named. When a review falsifies a universal claim, the
+repair is to enumerate the domain, not to subtract the counterexample you were handed.
+
+The size-budget close-out worked a third consecutive time and is now the reliable way to pay for a
+fix in an exempt component: the unification a round forces always exposes duplication worth more
+words than the fix costs. Three rounds ratcheted 5495 to 5492 while ADDING content, each time out
+of a rule that turned out to be stated twice (PASS defined in both Step 6 and Rules, the thin check
+stating its purpose three times, Step 5 restating the block rationale Step 6 owned).
+
+One process note. Two guards caught the same NUMBER recorded in a second and third place (the
+ratchet baseline lives in the script, in CLAUDE.md prose, and in the generated index). That is the
+guard set doing precisely its job, and it is worth expecting: lowering a ratchet is a three-file
+edit, not a one-file edit.
 
 **How to apply:** when a round's findings are mostly "this new clause contradicts an older clause it did not update", stop and ticket. That signal usually means the component is too large ([[generated-index-and-size-budget]] tracks the size half of this problem), not that the reviewer is being picky.
