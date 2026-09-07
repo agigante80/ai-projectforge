@@ -1,6 +1,6 @@
 ---
 name: bounded-review-loop-in-practice
-description: Fired 6 times now; close out by fixing merge-blockers only and ticketing the rest, say so in the commit, verify the reviewer's claims, unify a rule found in three faces, and enumerate the domain when a round falsifies a universal claim
+description: Fired 6 times, and once stopped preemptively on the findings' shape; close out by fixing merge-blockers only and ticketing the rest, say so in the commit, verify the reviewer's claims, unify a rule found in three faces, and enumerate the domain when a round falsifies a universal claim
 metadata:
   type: feedback
 ---
@@ -68,5 +68,20 @@ One process note. Two guards caught the same NUMBER recorded in a second and thi
 ratchet baseline lives in the script, in CLAUDE.md prose, and in the generated index). That is the
 guard set doing precisely its job, and it is worth expecting: lowering a ratchet is a three-file
 edit, not a one-file edit.
+
+**Stopped preemptively at round 2 on 2026-09-07** (PR #146, the body-region lifecycle), which is
+the first time the "mostly contradictions" signal was used to END a loop rather than to explain one
+after the fact. Round 2 found defects in round 1's fixes, which ARMS the wire without firing it,
+and the contract would have permitted a round 3. Nine of its eleven findings were "this new clause
+contradicts an older clause it did not update", so the loop stopped there and the remainder became
+#147. Treat the shape of the findings as sufficient on its own; waiting for the wire's second
+consecutive round just buys one more round of injection.
+
+That PR also produced the cleanest example yet of the right way to pay for a fix: **delete the
+rules that cannot execute rather than patch them.** Two survived rounds of review because an
+unexecutable instruction reads as covered: Step 1.5 re-triggering on a body that "shrank" with no
+prior body persisted anywhere, and Step 4 marking report sections "carried forward" when the prior
+review lives in a comment nothing can read. Deleting the second paid for the entire round. An
+instruction that cannot run is worse than an absent one, because absence gets noticed.
 
 **How to apply:** when a round's findings are mostly "this new clause contradicts an older clause it did not update", stop and ticket. That signal usually means the component is too large ([[generated-index-and-size-budget]] tracks the size half of this problem), not that the reviewer is being picky.
