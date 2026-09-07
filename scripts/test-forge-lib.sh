@@ -488,17 +488,57 @@ line2'
   || bad "multi-repo config re-read (round-2 M2)"
 
 # An ENV-provided value must still win over both files, and must never be cleared by the re-read.
+# It MUST cross a directory change: without one the memo returns early, the clear loop never runs,
+# and the test cannot fail (round 3 found exactly that, and a mutant clearing all six keys on every
+# chdir left the suite green).
 (
   . "$LIB"
-  mkdir -p "$T/rC"; ( cd "$T/rC" && git init -q . )
+  mkdir -p "$T/rC" "$T/rD"; ( cd "$T/rC" && git init -q . ); ( cd "$T/rD" && git init -q . )
   printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/FILE\n' > "$T/rC/.forge.conf"
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/OTHER\n' > "$T/rD/.forge.conf"
   export FORGE_REPO=owner/ENV FORGE_HOST=forgejo
   cd "$T/rC"; forge_api() { printf '[]'; }; forge_api_paginate /x >/dev/null 2>&1
+  cd "$T/rD"; after=$(forge_repo)                 # the chdir is what forces the re-read
   rm -rf "${_FORGE_TMPDIR-}"
-  [ "$(forge_repo)" = owner/ENV ]
+  [ "$after" = owner/ENV ]
 )
 [ $? -eq 0 ] && ok "an environment value still wins over the file, and survives a re-read" \
   || bad "env-wins survives the multi-repo re-read"
+
+# --- round-3: an empty repo root must not be treated as a valid root ---------------------------
+# In a DELETED working directory both `git rev-parse` and the `pwd` fallback fail and root is empty,
+# so "$root/.forge.conf" collapses to /.forge.conf. The guard was removed once as "dead"; it is not.
+# The real trigger needs a file at the filesystem root, which a test cannot create, so this drives
+# the same branch through _forge_root and asserts the consequence that IS reachable: with an empty
+# root the function must return before the clear loop wipes the caller's already-loaded config.
+(
+  . "$LIB"
+  _forge_root() { printf ''; }
+  FORGE_REPO=owner/KEEP; _FORGE_FROM_FILE="FORGE_REPO"; _FORGE_CONF_PWD="/nowhere"
+  _forge_load_conf
+  [ "${FORGE_REPO-}" = owner/KEEP ]
+)
+[ $? -eq 0 ] && ok "an empty repo root returns early instead of reading /.forge.conf (round-3)" \
+  || bad "empty-root guard (round-3)"
+
+# --- round-3 HIGH: file-derived values must not reach a CHILD process --------------------------
+# They were exported, so a child running in a different repo inherited the first repo's identity
+# and a write from that child targeted the wrong repo on the wrong host. Pre-existing rather than
+# introduced here (the pre-#78 baseline leaks identically on a direct call), but #78.1 moved the
+# common paginated path onto exactly that shape. The child must read its OWN .forge.conf.
+(
+  . "$LIB"
+  mkdir -p "$T/rE" "$T/rF"; ( cd "$T/rE" && git init -q . ); ( cd "$T/rF" && git init -q . )
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/EEE\n' > "$T/rE/.forge.conf"
+  printf 'FORGE_HOST=forgejo\nFORGE_REPO=owner/FFF\n' > "$T/rF/.forge.conf"
+  printf '. "%s"\nforge_repo\n' "$LIB" > "$T/child.sh"
+  forge_api() { printf '[]'; }
+  cd "$T/rE"; forge_api_paginate /x >/dev/null 2>&1   # the direct-call shape that used to leak
+  rm -rf "${_FORGE_TMPDIR-}"
+  cd "$T/rF"; [ "$(bash "$T/child.sh")" = owner/FFF ]
+)
+[ $? -eq 0 ] && ok "a child process in another repo reads its own config, not the parent's (round-3 H1)" \
+  || bad "file-derived config leaks into a child process (round-3 H1)"
 
 echo ""
 echo "forge-lib tests: $pass passed, $fail failed"

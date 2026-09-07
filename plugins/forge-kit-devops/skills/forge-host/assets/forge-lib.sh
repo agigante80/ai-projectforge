@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# forge-lib-version: 7
+# forge-lib-version: 8
 # forge-lib.sh: host-aware forge operations (GitHub | Forgejo). Source it; governance components
 # call the forge_* functions instead of `gh` directly, so the same logic works whether a repo lives
 # on GitHub or a self-hosted Forgejo. ADDITIVE: a repo with no Forgejo config defaults to GitHub and
@@ -28,6 +28,13 @@
 #       any non-zero as fatal now sees 44 for the ordinary "no such org" case. NOTE a 3xx that
 #       survives -L now returns 22 where `curl -f` returned 0, because -f only failed on >= 400
 #       (issue #78).
+#   v6  the config is parsed ONCE per process per working directory instead of on every call. A
+#       caller that edited .forge.conf mid-run and expected the next call to see it must now cd
+#       out and back, or unset _FORGE_CONF_PWD (issue #78.1).
+#   v7  file-derived FORGE_* values are no longer EXPORTED, so they do not reach a child process.
+#       This is what makes a child running in a different repo read its OWN .forge.conf. A caller
+#       that relied on sourcing forge-lib and then having a child inherit the repo identity must
+#       now export the value itself, which is the documented env-wins path anyway (issue #78).
 # Add a line here whenever a change alters what a caller must do, not merely what the library
 # does internally.
 
@@ -44,11 +51,21 @@ _forge_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
 # to re-run this about four times, via forge_host, forge_api_base and _forge_token, each costing a
 # `git rev-parse` plus a fork per config line.
 #
-# Values set FROM THE FILE are tracked and cleared when the working directory changes, so a process
-# that moves between repos re-reads correctly. An earlier version of this comment claimed that
-# multi-repo breakage predated the memo; that was measurably wrong (the parent commit was correct),
-# and it was the memo's caller-shell loading that caused it. Values set in the ENVIRONMENT still
-# win over the file everywhere, and are never cleared.
+# File-derived values are set as PLAIN shell variables and deliberately NOT exported, so they never
+# reach a child process; a child sourcing this library in another repo reads that repo's own file.
+# Exporting them was a long-standing bug, not one this branch introduced: measured on the pre-#78
+# baseline and on this branch, any forge_* call made OUTSIDE a command substitution leaked the repo
+# identity to every later child, identically on both. What #78.1 changed is the REACH, because
+# loading in forge_api_paginate's own shell (which is what makes the memo pay) turned the common
+# paginated path into one of those direct calls.
+#
+# Values set FROM THE FILE are also tracked and cleared when the working directory changes, so a
+# process that moves between repos re-reads correctly in-shell.
+#
+# KNOWN LIMIT (issue #131): the tracking is by KEY, not by value, so a caller that exports a
+# FORGE_* value AFTER a load which set that same key from the file will have its export cleared on
+# the next chdir. Env-wins holds everywhere else. Detecting this needs the variable's export
+# attribute, and the portable ways to read it cost a fork per key.
 _forge_load_conf() {
   # The guard keys on $PWD, a shell builtin that costs nothing, NOT on the resolved root: resolving
   # the root runs `git rev-parse`, and doing that BEFORE the guard is why the first version of this
@@ -57,6 +74,10 @@ _forge_load_conf() {
   local f line k v root
   [ "${_FORGE_CONF_PWD-}" != "${PWD-}" ] || return 0
   root="$(_forge_root)"
+  # Reachable, and removed once as "dead": in a DELETED working directory both `git rev-parse` and
+  # the `pwd` fallback fail, root is empty, and "$root/.forge.conf" collapses to /.forge.conf, whose
+  # FORGE_API_URL and FORGE_TOKEN_ENV this library would then adopt.
+  [ -n "$root" ] || return 0
   # Clear anything a PREVIOUS directory's file set, or env-wins would make the new file a no-op.
   # Loading in the caller's shell (which is what makes the memo pay) means these values persist,
   # so a process moving between repos would otherwise keep the first repo's identity.
@@ -74,7 +95,7 @@ _forge_load_conf() {
     v="${v%%#*}"; v="$(printf '%s' "$v" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^"//; s/"$//')"
     case "$k" in
       FORGE_HOST|FORGE_API_URL|FORGE_REPO|FORGE_TOKEN_ENV|FORGE_REMOTE|FORGE_NO_GIT_CREDENTIALS)
-        [ -n "${!k:-}" ] || { printf -v "$k" '%s' "$v"; export "$k"
+        [ -n "${!k:-}" ] || { printf -v "$k" '%s' "$v"     # NOT exported: see the header note
                               _FORGE_FROM_FILE="${_FORGE_FROM_FILE-} $k"; } ;;  # env wins; else file
     esac
   done < "$f"
