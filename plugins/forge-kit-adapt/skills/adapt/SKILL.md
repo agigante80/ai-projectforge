@@ -13,7 +13,7 @@ description: >
   Backward-compatible: also triggered by "upgrade-audit".
 ---
 
-<!-- forge-adapt-version: 56 -->
+<!-- forge-adapt-version: 57 -->
 
 # forge-adapt
 
@@ -184,9 +184,9 @@ done
 # the cache outlives uninstalls and keeps old versions beside the live one.
 SP_STATUS=$(grep -q '"superpowers@' ~/.claude/plugins/installed_plugins.json 2>/dev/null && echo present || echo absent)
 echo "superpowers: $SP_STATUS"   # printed so Step 2 (a fresh shell) reads it from the transcript
-# Shell assets installed by skills land in scripts/ (forge-host copies forge-lib.sh there;
-# release-automation copies version-lib.sh + release-run.sh). Same marker scheme, same drift rules:
-for f in scripts/forge-lib.sh scripts/version-lib.sh scripts/release-run.sh; do
+# Shell assets land in scripts/, each copied by the skill that ships it. Same markers, same
+# drift rules:
+for f in scripts/forge-lib.sh scripts/version-lib.sh scripts/release-run.sh scripts/check-ticket-mechanics.sh; do
   [ -f "$f" ] || continue
   n=$(basename "$f" .sh)
   v=$(grep -oP -- "#\s*${n}-version:\s*\K\d+" "$f" | head -1)
@@ -586,7 +586,8 @@ forge-adapt drift report - <project>
 Stop after the report. Do not modify anything. Status `behind` requires a local marker strictly
 lower than forge-kit; a copy with no local marker is `unversioned`, never `behind`.
 
-Shell assets (`scripts/forge-lib.sh`, `scripts/version-lib.sh`, `scripts/release-run.sh`) appear
+Shell assets (`scripts/forge-lib.sh`, `scripts/version-lib.sh`, `scripts/release-run.sh`,
+`scripts/check-ticket-mechanics.sh`) appear
 in the same table, compared against the catalogue's `asset:` rows. A present-but-unmarked copy is
 reported as `unversioned - refresh to deep-compare`, NEVER omitted: every install that predates
 the markers is exactly the copy most likely to be stale, so silence would hide the whole existing

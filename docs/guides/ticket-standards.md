@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 13 -->
+<!-- doc-rules-version: 14 -->
 
 # Ticket standards (canonical)
 
@@ -167,7 +167,7 @@ can still fork silently, so do not create more of them.
    twice in `check-ticket-mechanics.sh`, which took Step 3A's checks over from prose in #149.
    <!-- anchor: "Apply the rule-1 quality bar" -->
    <!-- anchor: "check 4: GWT structure (rule 1, the checkable half)" -->
-   <!-- anchor: "narrower than rule 1's quality bar on purpose" -->
+   <!-- anchor: "narrower than rule 1's quality" -->
 4. Rule 2's integration and regression coverage, and rule 8's implementation concreteness (build
    and test commands, dependency justification, N+1 and scalability), which the critic's brief
    carries as blocking-capable concerns. These joined this doc in #117 (issue #94); before that
@@ -181,10 +181,9 @@ can still fork silently, so do not create more of them.
    because the synthesis sub-agent has to be told what to write. Item 3 covers rule 1's appearance
    in that same table; these are the other four.
    <!-- anchor: "| Section | Derived from |" -->
-7. Check 5 in `check-ticket-mechanics.sh`, which restates rule 2's concrete-spec bar as a
-   mechanical check, down to rejecting a bare "add unit tests", and also restates the N/A rule's
+7. The unit-test check in `check-ticket-mechanics.sh`, which restates rule 2's concrete-spec bar
+   as a mechanical check, down to rejecting a bare "add unit tests", and restates the N/A rule's
    own rationale. It was Step 3A prose until #149.
-   <!-- anchor: "derives rule 2 out of scope (docs-only, research, infra-only)" -->
    <!-- anchor: "legitimate only where rule 2 is out of scope" -->
 8. Rule 7 in four further places: twice in `check-ticket-mechanics.sh` (check 6's bar and the
    reason it refers rather than passes), the critic's brief, and the Rules section (its
