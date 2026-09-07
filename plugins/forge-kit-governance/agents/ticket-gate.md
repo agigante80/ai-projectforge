@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 32 -->
+<!-- ticket-gate-version: 33 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -290,7 +290,7 @@ justify their seat, and heterogeneous agent teams underperform their best single
 
 **Adding project-specific lenses:** add a row to the table above with its trigger, and a
 lens definition section in the `ticket-gate-reference` skill alongside the Security lens
-(definitions go there, never here, so this file stays at its ratchet). Prefer modulating the critic's brief
+(definitions go there because an agent cannot carry reference files of its own, #124). Prefer modulating the critic's brief
 over adding an agent; add an agent only for a genuinely independent domain perspective.
 
 ### Step 2.7: Complexity assessment and specialist research
@@ -501,6 +501,11 @@ no-override rule included, fires for them like any other fundamental.
 
 ### Step 3C: Dispatch the lenses (only those Step 2.5 selected)
 
+**Reference skill required from here on.** Steps 3C and 4 both read the `ticket-gate-reference`
+skill, and a declared skill that is missing is skipped with only a debug-log warning. If it is
+not loaded, return `BLOCKED - REFERENCE_MISSING` before dispatching anything: improvising a lens
+brief spends a real sub-agent and Step 5 posts the result permanently.
+
 For each selected lens, dispatch its agent with: the review packet (Step 3B), the critic's
 JSON from Step 3B, the result contract (verbatim, per its definition in the reference skill), and its scope
 for this round (round 1: the whole ticket within its
@@ -545,9 +550,7 @@ than any lens, so it stays here and the reference skill only points at it.
 Build a markdown review (never a numeric scorecard):
 
 Use the review template in the preloaded `ticket-gate-reference` skill VERBATIM, including
-the optional `### Security lens` and `### Architecture alternatives` slots. If that skill is
-not loaded, STOP and report it rather than improvising a layout: Step 5 posts permanently,
-and a missing declared skill is skipped with only a debug-log warning.
+the optional `### Security lens` and `### Architecture alternatives` slots.
 
 ### Step 5: Post to GitHub
 

@@ -13,11 +13,11 @@ description: >
   Backward-compatible: also triggered by "upgrade-audit".
 ---
 
-<!-- forge-adapt-version: 55 -->
+<!-- forge-adapt-version: 56 -->
 
 # forge-adapt
 
-The dialogue mirrors a recommender: a short project profile, then the best one or two components per category, each
+forge-adapt is a recommender dialogue: a short project profile, then the best one or two components per category, each
 with a one-line reason. Nothing is written until you choose.
 
 ## When to use

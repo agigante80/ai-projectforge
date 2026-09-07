@@ -3,17 +3,19 @@ name: ticket-gate-reference
 description: |
   Reference material the ticket-gate agent reads once per run: the review output template it
   composes, and the specialist lens definitions with their result contract. Preloaded into
-  ticket-gate through that agent's `skills:` frontmatter. Not a standalone workflow; it holds
-  no rules and decides nothing.
+  ticket-gate through that agent's `skills:` frontmatter. Not a standalone workflow: it decides
+  nothing, and the only rules it carries are the ones a lens itself obeys.
 ---
 
-<!-- ticket-gate-reference-version: 1 -->
+<!-- ticket-gate-reference-version: 2 -->
 
 # ticket-gate reference
 
-**`ticket-gate.md` is canonical for every rule. This file holds none.** It carries the artifacts
-that agent reads once per run: an output template and the lens briefs. A rule may be POINTED at
-from here and must never be restated here, because this repo's own record is that content copied
+**`ticket-gate.md` is canonical for every ORCHESTRATOR rule.** It carries the artifacts that agent
+reads once per run: an output template and the lens briefs. The dividing line is who obeys a rule:
+a rule the LENS follows travels with its brief below, because the brief is dispatched to the lens
+verbatim; every rule ticket-gate itself follows (when a lens runs, how results merge, what a re-run
+rescopes) stays there and is only POINTED at from here. Nothing is restated across the two, because this repo's own record is that content copied
 into a second location drifts from the first (the lens contract across two plugins, the
 doc-versus-gate restatement). If a rule appears both here and in `ticket-gate.md`, that is the bug,
 and `ticket-gate.md` wins.
