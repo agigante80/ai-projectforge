@@ -12,7 +12,7 @@
 # would shrink from four sites to two rather than to one. This repo already faced the identical
 # shape with the enforced path set (#112), where the catalogue must use globs while the others use
 # an ERE, and chose a guard (test-component-paths.sh) precisely because one implementation was
-# impossible. A guard covers all five sites; a shared script would have covered two.
+# impossible. A guard covers all six sites; a shared script would have covered two.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/check-template-dir-order.sh"
@@ -52,29 +52,26 @@ out=$(bash "$SCRIPT" "$T/reordered" 2>&1); rc=$?
 case "$out" in *b.md*) ok "and it names the disagreeing file" ;;
                *) bad "names the file (got: $out)" ;; esac
 
-# --- a DROPPED legacy entry leaves those repos silently unguarded --------------------------------
-mk "$T/dropped/a.sh" <<M
+# --- the DOCUMENTED limit: a copy shortened below five entries leaves the comparison ------------
+# Pinned as a test rather than left in a comment, because it is the guard's one real blind spot and
+# a reader deserves to meet it here. A five-entry run is an ordering; anything shorter is prose,
+# and that threshold is what stops the guard failing builds over documentation. What catches a
+# shortened site is the site COUNT asserted at the end of this file, not the order comparison.
+for n in 4 3; do
+  mk "$T/short-$n/a.sh" <<M
   for d in $CANON; do :; done
 M
-mk "$T/dropped/b.md" <<'M'
-TPL_DIR=$(for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .gitea/issue_template .github/ISSUE_TEMPLATE; do :; done)
+  case $n in
+    4) list='.forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .gitea/issue_template .github/ISSUE_TEMPLATE' ;;
+    3) list='.forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE' ;;
+  esac
+  mk "$T/short-$n/b.md" <<M
+TPL_DIR=\$(for d in $list; do :; done)
 M
-bash "$SCRIPT" "$T/dropped" >/dev/null 2>&1
-[ $? -eq 1 ] && ok "dropping a legacy lowercase entry fails" || bad "dropped entry fails"
-
-# The DOCUMENTED limit, pinned rather than left to be rediscovered: a site cut below the
-# four-token threshold stops looking like an ordering and drops out of the comparison entirely.
-# What catches that in the real repo is the site COUNT asserted at the end of this file, not this
-# comparison, and a reader deserves to see that stated as a test rather than only as a comment.
-mk "$T/undercut/a.sh" <<M
-  for d in $CANON; do :; done
-M
-mk "$T/undercut/b.md" <<'M'
-TPL_DIR=$(for d in .forgejo/ISSUE_TEMPLATE .gitea/ISSUE_TEMPLATE .github/ISSUE_TEMPLATE; do :; done)
-M
-bash "$SCRIPT" "$T/undercut" >/dev/null 2>&1
-[ $? -eq 0 ] && ok "a site cut to three entries drops out of the comparison (known limit)" \
-  || bad "the three-entry limit behaves as documented"
+  bash "$SCRIPT" "$T/short-$n" >/dev/null 2>&1
+  [ $? -eq 0 ] && ok "a copy cut to $n entries drops out of the comparison (known limit)" \
+    || bad "the $n-entry limit behaves as documented"
+done
 
 # --- a line-continued copy is the same list, not a different one --------------------------------
 mk "$T/wrapped/a.sh" <<M
@@ -147,6 +144,48 @@ bash "$SCRIPT" "$T/named" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "a component whose name starts with test- is still scanned" \
   || bad "test-named components are scanned"
 
+# --- round 2: a divergent copy must never VANISH from the comparison ----------------------------
+# Splitting a run at the canon's first entry dropped any resulting group below the threshold, so a
+# host-reordered copy (Gitea first) produced only sub-threshold fragments and disappeared: the
+# guard then reported "1 sites, all carrying the same order" and exited 0. That is the #61 defect
+# class passing green, which is strictly worse than the merge the split was added to fix.
+mk "$T/vanish/a.sh" <<M
+  for d in $CANON; do :; done
+M
+mk "$T/vanish/b.md" <<'M'
+TPL_DIR=$(for d in .gitea/ISSUE_TEMPLATE .gitea/issue_template .github/ISSUE_TEMPLATE .forgejo/ISSUE_TEMPLATE .forgejo/issue_template; do :; done)
+M
+out=$(bash "$SCRIPT" "$T/vanish" 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "a host-reordered copy is compared, not dropped" \
+  || bad "a reordered copy vanishes from the comparison (rc=$rc)"
+case "$out" in *b.md*) ok "and the vanishing copy is named" ;;
+               *) bad "names the reordered copy (got: $out)" ;; esac
+
+# --- round 2: prose that enumerates the directories with "and" is not a site ---------------------
+# A sentence listing them comma-separated with "and" before the last leaves a four-token run of
+# pure punctuation, which the guard read as a divergent 4-entry ordering. forge-host's reference
+# already has a sentence of that shape.
+mk "$T/andprose/a.sh" <<M
+  for d in $CANON; do :; done
+M
+mk "$T/andprose/b.md" <<'M'
+Forgejo reads `.forgejo/ISSUE_TEMPLATE`, `.forgejo/issue_template`, `.gitea/ISSUE_TEMPLATE`,
+`.gitea/issue_template` and `.github/ISSUE_TEMPLATE` depending on version.
+M
+bash "$SCRIPT" "$T/andprose" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "prose enumerating the dirs with 'and' is not flagged" \
+  || bad "an 'and' list in prose is not a site"
+
+# --- round 2: a copy laid out as a markdown table must still be seen ----------------------------
+mk "$T/table/a.sh" <<M
+  for d in $CANON; do :; done
+M
+mk "$T/table/b.md" <<'M'
+| .gitea/ISSUE_TEMPLATE | .gitea/issue_template | .github/ISSUE_TEMPLATE | .forgejo/ISSUE_TEMPLATE | .forgejo/issue_template |
+M
+bash "$SCRIPT" "$T/table" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "a table-formatted copy is scanned, not invisible" || bad "table copies are scanned"
+
 # --- fail closed on a missing root ---------------------------------------------------------------
 bash "$SCRIPT" "$T/does-not-exist" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "a missing root fails closed with exit 2" || bad "missing root fails closed"
@@ -158,8 +197,11 @@ out=$(bash "$SCRIPT" 2>&1); rc=$?
 # three entries would simply drop out of the comparison and the guard would report agreement among
 # the survivors. The ticket said four; the guard found dep-auditor.md and the lockstep header too.
 # Anchored: a bare substring also matched "16 sites", which is the opposite of pinning a count.
-case "$out" in "check-template-dir-order: 6 sites,"*) ok "and it finds exactly six of them, two more than the ticket listed" ;;
-               *) bad "finds exactly six sites (got: $out)" ;; esac
+# SEVEN: the six copies plus the guard's own CANON tuple, which the punctuation set now reaches.
+# That is deliberate. The definition being scanned alongside the copies is the cheapest possible
+# proof that it agrees with them, and it costs nothing to include.
+case "$out" in "check-template-dir-order: 7 sites,"*) ok "and it finds exactly seven, the six copies plus the canon itself" ;;
+               *) bad "finds exactly seven sites (got: $out)" ;; esac
 
 echo ""
 echo "template-dir-order tests: $pass passed, $fail failed"

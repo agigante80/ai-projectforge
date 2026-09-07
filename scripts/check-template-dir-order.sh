@@ -13,7 +13,7 @@
 # the two left behind are the fragile ones. The repo already met this shape with the enforced path
 # set (#112), where the catalogue must use globs while three others use an ERE, and answered it
 # with a guard (test-component-paths.sh) because one implementation was impossible. Same answer
-# here, and it covers all five sites instead of two.
+# here, and it covers all six sites instead of two.
 #
 # WHY HOST-GROUPED ORDER MATTERS, since a future editor will be tempted to "tidy" it into case
 # groups: a repo migrated to Forgejo that kept a stale .github/ISSUE_TEMPLATE must have its LIVE
@@ -34,13 +34,15 @@ import os, re, sys
 
 root = sys.argv[1]
 TOKEN = re.compile(r'\.(?:forgejo|gitea|github)/(?:ISSUE_TEMPLATE|issue_template)\b')
-# FOUR or more directories in one run is an ORDERING; fewer is prose. The threshold was set by the
-# real tree, not by taste: forge-host/references/forgejo.md names three of them in a sentence about
-# what Forgejo reads, and adapt/SKILL.md names two in a sentence about where templates are written.
-# Neither is a copy of the resolution order, and treating them as one would make the guard cry wolf
-# at documentation. The residual gap, a real site edited down to three entries dropping out of the
-# comparison entirely, is closed by the site COUNT its contract test asserts.
-MIN = 4
+# A run of ALL FIVE directories is an ordering; anything shorter is prose. Four was tried and was
+# wrong in both directions: a sentence enumerating the directories comma-separated with "and"
+# before the last leaves a four-token punctuation run and got reported as a divergent site, while
+# the real documentation passages name two and three of them. The residual gap, a real site edited
+# below five entries dropping out of the comparison, is closed by the site COUNT its contract test
+# asserts, and it is the cheaper of the two failure directions: a guard that cries wolf at prose
+# gets switched off, and one that fails a build for documentation is worse than one that needs a
+# count to notice a deletion.
+MIN = 5
 
 # THE CANON, pinned here rather than merely inferred from whatever the copies happen to say. The
 # first version compared the sites only to each other, so one sweep reordering ALL of them passed
@@ -52,7 +54,14 @@ CANON = ('.forgejo/ISSUE_TEMPLATE', '.forgejo/issue_template',
 
 sites = []
 for dirpath, dirnames, filenames in os.walk(root):
-    dirnames[:] = [d for d in dirnames if d not in ('.git', 'node_modules', 'temp', '.full-review')]
+    # The gitignored runtime stores CLAUDE.md documents. A copy of a diff written into
+    # .superpowers/sdd/ by /full-review made this guard fail with three bogus orders, on content
+    # git never carries. Replacing this hand-maintained list with the tracked file set is #142,
+    # filed to be done together with #140 rather than as a third copy of the same rule.
+    dirnames[:] = [d for d in dirnames
+                   if d not in ('.git', 'node_modules', 'temp', '.full-review',
+                                '.superpowers', '.venv', 'node_modules')
+                   and not (d == 'overnight' and os.path.basename(dirpath) == '.claude')]
     for fn in sorted(filenames):
         path = os.path.join(dirpath, fn)
         rel_ = os.path.relpath(path, root)
@@ -66,25 +75,32 @@ for dirpath, dirnames, filenames in os.walk(root):
             lines = open(path, encoding='utf-8', errors='replace').read().split('\n')
         except OSError:
             continue
-        # An ORDERING is a bare list: the tokens are separated only by punctuation (whitespace,
-        # commas, backticks, slashes, a comment hash, a line continuation). PROSE puts WORDS
-        # between them, as in "`.github/ISSUE_TEMPLATE/` on GitHub, or to `.forgejo/...`". Keying
-        # on that is what separates the six real sites from the two documentation passages, with
-        # no allowlist and no hand-maintained site list.
+        # An ORDERING is a bare list: the tokens are separated only by punctuation. PROSE puts
+        # WORDS between them, as in "`.github/ISSUE_TEMPLATE/` on GitHub, or to `.forgejo/...`".
+        # Keying on that is what separates the real sites from the documentation passages, with no
+        # allowlist and no hand-maintained site list. The punctuation set includes table pipes and
+        # quotes, so a copy laid out as a markdown table or a python tuple is seen rather than
+        # silently skipped, and that is why the CANON tuple above is itself scanned and counted.
         text = '\n'.join(lines)
         for m in re.finditer(
-                r'(?:%s)(?:[\s,`/\\#()]*(?:%s))+' % (TOKEN.pattern, TOKEN.pattern), text):
+                r'(?:%s)(?:[\s,`/\\#()|;:"\'-]*(?:%s))+' % (TOKEN.pattern, TOKEN.pattern), text):
             seq = TOKEN.findall(m.group(0))
             ln = text[:m.start()].count('\n') + 1
-            # Two back-to-back copies separated only by punctuation matched as ONE run, so a file
+            # Two back-to-back copies separated only by punctuation match as ONE run, so a file
             # whose copies were identical and correct failed with "the order differs between
-            # sites". Restart a site wherever the canon's first entry appears again.
+            # sites". Restart a site wherever the canon's first entry appears again, but ONLY when
+            # every resulting group is a full ordering: splitting unconditionally made a
+            # host-reordered copy fragment into sub-threshold pieces and VANISH from the
+            # comparison, which let the #61 defect pass green. A copy that does not split cleanly
+            # is reported whole, and being wrong is exactly what it is.
             groups, cur = [], []
             for tok in seq:
                 if tok == CANON[0] and cur:
                     groups.append(cur); cur = []
                 cur.append(tok)
             if cur: groups.append(cur)
+            if not all(len(g) >= MIN for g in groups):
+                groups = [seq]
             for g in groups:
                 if len(g) >= MIN:
                     sites.append((rel_, ln, tuple(g)))
