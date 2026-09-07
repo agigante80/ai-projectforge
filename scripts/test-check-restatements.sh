@@ -26,7 +26,11 @@ bad() { echo "  FAIL: $1"; fail=$((fail + 1)); }
 # A fixture pair: a doc with a Precedence list, and a gate that restates rules.
 mkfix() {                     # mkfix <dir> <precedence-items-file> <gate-file>
   mkdir -p "$1/docs/guides" "$1/gate"
-  { echo "# Ticket standards"; echo; echo "## Precedence"; echo
+  { echo "# Ticket standards"; echo
+    # The guard reads the DEFINED rule numbers from these headings, so a fixture needs them or
+    # nothing is a valid rule. This is also what stops "rules 400 lines below" parsing as rule 400.
+    for n in 1 2 3 4 5 6 7 8; do echo "### $n. Rule $n"; echo; done
+    echo "## Precedence"; echo
     cat "$2"; echo; echo "## The N/A rule (load-bearing)"; echo "text"; } > "$1/docs/guides/ticket-standards.md"
   cp "$3" "$1/gate/ticket-gate.md"
 }
@@ -173,21 +177,107 @@ bash "$SCRIPT" "$T/a/docs/guides/ticket-standards.md" >/dev/null 2>&1
   || bad "a single path argument is refused"
 
 # --- round 1: headings inside fenced blocks are payload, not sections ----------------------------
+# A heading inside a fenced block is template PAYLOAD. If it were treated as a section, an
+# unlisted restatement would be reported against a heredoc body instead of the step that owns it.
 cat > "$T/gate-fence.md" <<'G'
 ### Step 5: Post to the forge
-The bar this step enforces is anchored here, outside any fence.
 ```markdown
 ## ticket-gate: remediation guide
-restating rule 6 inside a template payload
 ```
+a bar restating rule 6 that nothing lists
 G
 cat > "$T/items-fence.md" <<'I'
-1. Rule 6's bar in the post step. <!-- anchor: "The bar this step enforces is anchored here" -->
+1. Rule 1's quality bar. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
 I
-mkfix "$T/k" "$T/items-fence.md" "$T/gate-fence.md"
-out=$(bash "$SCRIPT" "$T/k/docs/guides/ticket-standards.md" "$T/k/gate/ticket-gate.md" 2>&1); rc=$?
-[ "$rc" -eq 0 ] && ok "a heading inside a fenced block is payload, not a section" \
-  || bad "fenced headings are not sections (rc=$rc: $out)"
+cat > "$T/gate-fence2.md" <<'G'
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+G
+mkfix "$T/k" "$T/items-fence.md" "$T/gate-fence2.md"
+cp "$T/gate-fence.md" "$T/k/gate/extra.md"
+out=$(bash "$SCRIPT" "$T/k/docs/guides/ticket-standards.md" "$T/k/gate/ticket-gate.md" "$T/k/gate/extra.md" 2>&1)
+case "$out" in
+  *"Step 5: Post to the forge"*) ok "an unlisted item is reported against the real heading" ;;
+  *"remediation guide"*) bad "a fenced heading was treated as the section" ;;
+  *) bad "fenced-heading case did not report as expected (got: $out)" ;;
+esac
+
+# --- round 2: a NEW restatement inside an already-anchored section must still be caught ---------
+# Coverage used to be per whole section, so once Step 3B was anchored for rule 4 anywhere, a
+# brand-new "(rule 4)" bar anywhere else in Step 3B passed. Coverage is now proximity-based.
+cat > "$T/gate-near.md" <<'G'
+### Step 3B: The critic
+- **UI E2E (rule 3):** a ticket touching any UI needs E2E specs
+- a long stretch of unrelated brief text
+- another line of unrelated brief text
+- yet another line of unrelated brief text
+- and one more line of unrelated brief text
+- and still more unrelated brief text
+- and further unrelated brief text here
+- **Newly added bar (rule 3):** invented later, anchored by nobody
+G
+cat > "$T/items-near.md" <<'I'
+1. Rule 3's UI E2E bar in the critic's brief. <!-- anchor: "**UI E2E (rule 3):**" -->
+I
+mkfix "$T/l" "$T/items-near.md" "$T/gate-near.md"
+out=$(bash "$SCRIPT" "$T/l/docs/guides/ticket-standards.md" "$T/l/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "a new restatement far from any anchor is caught inside a covered section" \
+  || bad "per-section coverage hides a new bar in an anchored section"
+
+# and the legitimate case: a rule reference ON or beside its anchor still passes
+cat > "$T/gate-adj.md" <<'G'
+### Step 3B: The critic
+- **UI E2E (rule 3):** a ticket touching any UI needs E2E specs,
+  a call Step 3A confirms for rule 3 as well
+G
+mkfix "$T/m" "$T/items-near.md" "$T/gate-adj.md"
+bash "$SCRIPT" "$T/m/docs/guides/ticket-standards.md" "$T/m/gate/ticket-gate.md" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "a rule reference adjacent to its anchor still passes" || bad "adjacent reference passes"
+
+# --- round 2: direction 2 must read the PLURAL form in the gate, not only in the doc -------------
+cat > "$T/gate-plural2.md" <<'G'
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+5. a bar restating rules 5 and 6 that nothing lists
+G
+cat > "$T/items-plural2.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+I
+mkfix "$T/n" "$T/items-plural2.md" "$T/gate-plural2.md"
+out=$(bash "$SCRIPT" "$T/n/docs/guides/ticket-standards.md" "$T/n/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "a plural 'rules 5 and 6' in the GATE is detected too" \
+  || bad "direction 2 reads the plural form"
+
+# --- round 2: an allowlist entry must not be able to silence broadly ----------------------------
+cat > "$T/items-broad.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: Step :: rule 4 :: far too broad, matches every Step section -->
+I
+cat > "$T/gate-broad.md" <<'G'
+### Step 2.5: Select the review set
+a routing row mentioning rule 4
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+### Step 3B: The critic
+a second place mentioning rule 4
+G
+mkfix "$T/o" "$T/items-broad.md" "$T/gate-broad.md"
+out=$(bash "$SCRIPT" "$T/o/docs/guides/ticket-standards.md" "$T/o/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "an allowlist prefix matching several sections is refused as too broad" \
+  || bad "a broad allowlist prefix is refused"
+case "$out" in *"too broad"*) ok "and it says the entry is too broad" ;;
+               *) bad "names the breadth problem (got: $out)" ;; esac
+
+# --- round 2: an allowlist rule field with no digits must fail, not be dropped -------------------
+cat > "$T/items-nodigit.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: Step 2.5 :: the privacy rule :: no rule number given -->
+I
+mkfix "$T/p" "$T/items-nodigit.md" "$T/gate-pointer.md"
+bash "$SCRIPT" "$T/p/docs/guides/ticket-standards.md" "$T/p/gate/ticket-gate.md" >/dev/null 2>&1
+[ $? -ne 0 ] && ok "an allowlist entry naming no rule number is refused" || bad "allowlist needs a rule number"
 
 # --- fail closed on a missing input, never pass vacuously ----------------------------------------
 bash "$SCRIPT" "$T/nope.md" "$T/gate-ok.md" >/dev/null 2>&1

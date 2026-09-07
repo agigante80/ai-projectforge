@@ -47,7 +47,7 @@ python3 - "$DOC" "${GATE_FILES[@]}" <<'PY'
 import re, sys
 
 doc_path, gate_paths = sys.argv[1], sys.argv[2:]
-doc = open(doc_path).read()
+doc = open(doc_path, encoding="utf-8").read()
 
 m = re.search(r'^## Precedence\s*$(.*?)^## ', doc, re.M | re.S)
 if not m:
@@ -75,6 +75,13 @@ if not items:
     sys.exit(2)
 
 ANCHOR = re.compile(r'<!--\s*anchor:\s*"(.*?)"\s*-->', re.S)
+# The rule numbers this doc DEFINES, read from its own "### N. Title" headings, so the guard can
+# never be argued into tracking a number that is not a rule.
+VALID_RULES = set(re.findall(r'^### (\d+)\. ', doc, re.M))
+if not VALID_RULES:
+    print("check-restatements: the doc defines no numbered rules ('### N. Title')", file=sys.stderr)
+    sys.exit(2)
+
 RULEREF = re.compile(r'\brule[-\s](\d+)', re.I)
 # "rules 2, 3, 4 and 7" is one mention of four rules; matching only the first granted rule 1 alone.
 RULES_PLURAL = re.compile(r'\brules\s+((?:\d+(?:\s*(?:,|and)\s*)?)+)', re.I)
@@ -83,7 +90,9 @@ def rules_in(text):
     found = set(RULEREF.findall(text))
     for mm in RULES_PLURAL.finditer(text):
         found.update(re.findall(r'\d+', mm.group(1)))
-    return found
+    # Only numbers the doc actually defines as rules. Without this the plural pattern read
+    # "the re-run rules 400 lines from the steps they govern" as a reference to rule 400.
+    return {r for r in found if r in VALID_RULES}
 
 # Allowlist: "<section> :: rule <N> :: <reason>". The reason is mandatory.
 allow, allow_bad = set(), []
@@ -92,14 +101,16 @@ for a in re.finditer(r'<!--\s*restatement-allow:\s*(.*?)\s*-->', doc, re.S):
     if len(parts) < 3 or not parts[2]:
         allow_bad.append(a.group(1).strip()); continue
     rn = re.search(r'(\d+)', parts[1])
-    if rn: allow.add((parts[0], rn.group(1)))
+    if not rn:
+        allow_bad.append(a.group(1).strip()); continue
+    allow.add((parts[0], rn.group(1)))
 
 # Gate text, attributed to its nearest preceding heading.
 sections = []
 for path in gate_paths:
     name = path.split('/')[-1]
     sec, fenced = f"{name} (top)", False
-    for line in open(path):
+    for line in open(path, encoding="utf-8"):
         if line.lstrip().startswith('```'):
             fenced = not fenced
         elif not fenced:
@@ -109,24 +120,40 @@ for path in gate_paths:
             if h: sec = f"{name} :: {h.group(1).strip()}"
         sections.append((sec, line))
 
-def section_of(needle):
-    """The set of sections whose text contains this literal anchor."""
-    found, buf, cur = set(), "", None
-    for sec, line in sections:
-        if cur is None: cur = sec
-        if sec != cur:
-            if needle in buf: found.add(cur)
-            buf, cur = "", sec
-        buf += line
-    if cur is not None and needle in buf: found.add(cur)
-    return found
+def anchor_sites(needle):
+    """Every (file, line index) where this literal anchor appears.
+
+    Line-level rather than section-level: an anchor names one bar, and coverage has to be that
+    precise or a bar added later in the same section inherits the anchor's licence."""
+    hits, first = [], needle.split('\n')[0]
+    for i, (sec, line) in enumerate(sections):
+        if first and first in line:
+            hits.append((sec.split(' :: ')[0], i))
+    return hits
+
+# How near a rule reference must be to an anchor that covers it. Anchors sit on or beside the bar
+# they name, so this is deliberately tight: a bar invented later, elsewhere in an already-anchored
+# section, is exactly what per-section coverage used to hide.
+WINDOW = 2
+
+# An allowlist entry must name ONE section. A bare prefix like "Step" matched every Step heading
+# and silenced a rule across all of them, while the comment beside it claimed that was impossible.
+all_heads = {sec.split(' :: ', 1)[1] for sec, _ in sections if ' :: ' in sec}
+allow_broad = []
+for ss, rr in sorted(allow):
+    hits = {h for h in all_heads if h.startswith(ss)}
+    if len(hits) > 1:
+        allow_broad.append((ss, rr, sorted(hits)))
 
 errors = []
+for ss, rr, hits in allow_broad:
+    errors.append(f"allowlist entry '{ss} :: rule {rr}' is too broad: it matches "
+                  f"{len(hits)} sections ({', '.join(hits[:3])}...). Name one.")
 for bad in allow_bad:
     errors.append(f"allowlist entry has no reason (needs '<section> :: rule N :: <why>'): {bad}")
 
 # Direction 1, listed-but-absent: every item needs an anchor, and every anchor must resolve.
-covered = {}                     # rule -> set of sections an item claims for it
+covered = {}                     # rule -> list of (file, line) an item anchors it at
 for n, item in enumerate(items, 1):
     anchors = ANCHOR.findall(item)
     rules = rules_in(item)
@@ -134,29 +161,34 @@ for n, item in enumerate(items, 1):
         errors.append(f"Precedence item {n} declares no anchor, so nothing can verify it")
         continue
     for a in anchors:
-        secs = section_of(a)
-        if not secs:
+        sites = anchor_sites(a)
+        if not sites:
             errors.append(f"Precedence item {n} is STALE: anchor no longer appears in the gate: \"{a}\"")
         else:
             for r in rules:
-                covered.setdefault(r, set()).update(secs)
+                covered.setdefault(r, []).extend(sites)
 
 # Direction 2, found-but-unlisted: every rule reference must sit in a covered section.
 seen = set()
-for sec, line in sections:
-    for r in RULEREF.findall(line):
-        if (sec, r) in seen: continue
-        seen.add((sec, r))
+for idx, (sec, line) in enumerate(sections):
+    fname = sec.split(' :: ')[0]
+    for r in rules_in(line):
+        if (idx, r) in seen: continue
+        seen.add((idx, r))
         # Matched by PREFIX against the heading, so an entry can say "Step 2.5" rather than
         # repeating the whole heading, and optionally against the file-qualified
         # "<file> :: <heading>" form when a heading name is shared across files. It still has to
         # name a real section, so it cannot be used to silence the file.
         head = sec.split(' :: ', 1)[1] if ' :: ' in sec else sec
-        if any(rr == r and (head.startswith(ss) or sec.startswith(ss)) for ss, rr in allow):
+        # Matched against the HEADING only. Matching the file-qualified string too let an entry
+        # like "ticket-gate.md" silence a rule across a whole file (round 2).
+        if any(rr == r and head.startswith(ss)
+               and not any(b[0] == ss and b[1] == rr for b in allow_broad) for ss, rr in allow):
             continue
-        if sec not in covered.get(r, set()):
+        near = [1 for f, li in covered.get(r, []) if f == fname and abs(li - idx) <= WINDOW]
+        if not near:
             errors.append(f"UNLISTED restatement: rule {r} is referenced in [{sec}] "
-                          f"but no Precedence item anchors rule {r} there")
+                          f"but no Precedence item anchors rule {r} within {WINDOW} lines of it")
 
 if errors:
     print("check-restatements: the Precedence list does not match the gate.\n", file=sys.stderr)

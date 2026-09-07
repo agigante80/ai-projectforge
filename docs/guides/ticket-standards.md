@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 10 -->
+<!-- doc-rules-version: 11 -->
 
 # Ticket standards (canonical)
 
@@ -136,12 +136,18 @@ section no anchor covers (an unlisted restatement). Editing a rule means editing
 anchors name, in the same change. An item with no anchor fails too, because an unanchored entry is
 exactly the thing that rotted before.
 
+Coverage is per LOCATION, not per section: a rule reference must sit within two lines of an anchor
+that covers it. Per-section coverage was tried first and was shown to be worthless here, because
+once a big section like Step 3B was anchored for a rule anywhere, a brand-new bar for that rule
+elsewhere in the same section inherited the licence and passed.
+
 **What the guard does NOT prove, stated plainly, because overclaiming is this section's own bug.**
-Detection keys on the literal token `rule N`. A restatement that paraphrases a rule without naming
-it is invisible, and two listed entries are in that shape today: the security lens checklist, whose
-file contains no rule token at all, and rule 8's implementation concreteness in the critic's brief.
-So this list is complete with respect to everything the guard can see, which is a narrower claim
-than the one this section used to make and get wrong three review rounds running.
+Detection keys on the literal token `rule N` (or `rules N and M`), validated against the rule
+numbers this doc defines. A restatement that paraphrases a rule without naming it is invisible, and
+two listed entries are in that shape today: the security lens checklist, whose file contains no
+rule token at all, and rule 8's implementation concreteness in the critic's brief. So this list is
+complete with respect to everything the guard can see, which is a narrower claim than the one this
+section used to make and get wrong three review rounds running.
 
 **Therefore: a restatement added to the gate MUST name its rule.** Writing `(rule 7)` beside the
 bar is what makes the next one detectable. A paraphrase citing no rule number is the one shape that
@@ -159,6 +165,7 @@ can still fork silently, so do not create more of them.
    check 4.
    <!-- anchor: "Apply the rule-1 quality bar" -->
    <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+   <!-- anchor: "REFERRED to the critic's rule-1" -->
 4. Rule 2's integration and regression coverage, and rule 8's implementation concreteness (build
    and test commands, dependency justification, N+1 and scalability), which the critic's brief
    carries as blocking-capable concerns. These joined this doc in #117 (issue #94); before that
