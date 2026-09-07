@@ -78,7 +78,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 |---|---|---|
 | `forge-kit-adapt` | 0.3.7 | skill: adapt |
 | `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
-| `forge-kit-devops` | 0.8.2 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
+| `forge-kit-devops` | 0.9.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.7.20 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
 | `forge-kit-security` | 0.3.0 | agents: api-security-tester, backend-security-coder, security-auditor; skills: owasp-api-security, privacy-regime |
