@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 37 -->
+<!-- ticket-gate-version: 38 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -157,9 +157,10 @@ assumption made.
 
 **0c-iv. Build updated body**
 
-Merge synthesised content into the existing issue body, preserving all prior text verbatim.
-Replace `template-version: N` (or add the marker if missing) with
-`template-version: $CURRENT_TPL_VER` (the value read in 0a; never a hardcoded literal).
+Merge synthesised content into the existing issue body, preserving all prior AUTHOR text
+verbatim, and clear the gate's own regions (Step 6's lifecycle): a surviving block is read as
+valid prior state by the very run that voided it. Replace `template-version: N` (or add the
+marker if missing) with `template-version: $CURRENT_TPL_VER` (the value read in 0a; never a hardcoded literal).
 
 ```bash
 gh issue edit <NUMBER> --repo {{GITHUB_REPO}} --body "<full updated body>"
@@ -167,19 +168,7 @@ gh issue edit <NUMBER> --repo {{GITHUB_REPO}} --body "<full updated body>"
 
 **0c-v. Post void and synthesis comment**
 
-```
-Template auto-upgraded to v<CURRENT_TPL_VER> - content synthesised
-
-Issue was filed against template v<old> (current: v<CURRENT_TPL_VER>).
-The following sections were synthesised from the existing issue content:
-
-- <section id>: <what was synthesised for it, or N/A - <reason>>
-
-Enriched existing sections: <list or "none">
-
-Any previous gate verdict is void. Re-reviewing now against the enriched body.
-Review the synthesised content and re-run /gate-ticket <N> if corrections are needed.
-```
+Post the SYNTHESIS VOID template from the reference skill.
 
 **0c-vi. Proceed to 0b**
 
@@ -537,10 +526,8 @@ gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "<review>"
 
 ### Step 6: Return result and auto-remediate
 
-**The `gate-verdict` block is written on EVERY path below, PASS included.** A cleared ticket still
-carrying the last round's NEEDS-WORK is the stale state it prevents, and it is the run's only
-durable output: `forge_*` has no read-comments primitive, and humans triage bodies. Insert at the
-top when absent, replace between delimiters when present, touch nothing outside them:
+**The `gate-verdict` block is written on EVERY path below, PASS included**, and it is the run's
+only durable output: `forge_*` has no read-comments primitive, and humans triage bodies.
 
 ```markdown
 <!-- gate-verdict:start -->
@@ -557,11 +544,21 @@ gh issue edit <NUMBER> --repo {{GITHUB_REPO}} --body "<updated body>"
 
 `<ROUND>` is 1 when the Step 1 body carries no block, else that block's round plus 1: the round
 number every re-run rule reads (`<N>` stays the issue number). Computed fields only, so nothing
-drifts; BLOCKED never appears, those paths returning earlier. **Three steps write the body**:
-0c-iv before the Step 1 fetch, Step 2.9 item 3 after it, and this one. The block lands here
-because this step rebuilds from the Step 1 cache, clobbering earlier writes; that same rebuild
-drops Step 2.9's, which is #145. Its regions are disjoint: `gate-verdict`,
-`### Required changes (gate)`, `decision` for #129.
+drifts; BLOCKED never appears, those paths returning earlier.
+
+**Every region the gate writes obeys one lifecycle**; per-region answers are how the last one
+drifted. The regions are `gate-verdict`, `gate-required-changes`, `gate-alternatives`, and
+`gate-decision` for #129; each is wrapped in `<!-- <name>:start -->` and `<!-- <name>:end -->`,
+carries its own `###` heading for human readers, disjoint, and written here alone.
+
+1. **Insert or replace, never append.** A second copy is a second answer, and the stale one is
+   indistinguishable from the live one.
+2. **Re-read the body first.** Three steps write it: 0c-iv before the Step 1 fetch and Step 2.9
+   item 3 after it, so the Step 1 cache is stale here; rebuilding from it silently dropped
+   Step 2.9's codebase-context write every round.
+3. **Clear what the verdict no longer supports.** A PASS removes `gate-required-changes` and
+   `gate-alternatives`: unmet requirements above a PASS verdict are the stale state this
+   mechanism exists to prevent. 0c-iv removes all four, since it voids the verdict.
 
 **If blocking is empty, the verdict is PASS** (the Rules define it). Print
 `✅ PASS - Ticket #<N> is ready for implementation`, with the reviewed assumptions in one line.
@@ -573,21 +570,17 @@ auto-remediation and never prints NEEDS-WORK.
 **If the verdict is NEEDS-WORK (blocking non-empty):**
 
 The blocking items arrive pre-classified by the judging agents' `class` fields (critic and lens
-alike), per Step 3B. A **fundamental** item's architecture alternatives were generated
-at Step 4 and posted with the review; auto-remediation copies them into the body. **Significant**:
-the approach stands but blocking gaps exist.
+alike), per Step 3B. A **fundamental** item's architecture alternatives were generated at Step 4.
+**Significant**: the approach stands but blocking gaps exist.
 
 **Default behaviour: auto-remediate without prompting.**
 
-Build an updated issue body:
-1. Preserve all existing content verbatim
-2. Append a `### Required changes (gate)` section with the blocking items as a checklist
-3. Where the critic WROTE improved GWT scenarios or a docs_impact paragraph, insert them
+Under the lifecycle above, in the single edit above:
+1. Replace `gate-required-changes` with the blocking items as a checklist
+2. Where the critic WROTE improved GWT scenarios or a docs_impact paragraph, insert them
    into the corresponding sections (marked as gate-written, for the author to review)
-4. If architecture alternatives were generated, append an `### Architecture alternatives`
-   section with the 2 to 3 options
-
-Apply it together with the verdict block, in the single edit above.
+3. If architecture alternatives were generated, replace `gate-alternatives` with the
+   2 to 3 options
 
 Print:
 ```
