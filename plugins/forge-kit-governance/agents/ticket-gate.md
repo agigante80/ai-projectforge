@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 39 -->
+<!-- ticket-gate-version: 40 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -203,9 +203,9 @@ gh issue view <NUMBER> --repo {{GITHUB_REPO}} --json number,title,body,labels,mi
 
 ### Step 1.5: Thin ticket pre-check
 
-Runs BEFORE the critic, in round 1 only (and any re-run whose AUTHOR text shrank, or after 0c
-fired); it never repeats on an ordinary re-run, because a body that only grows cannot become
-thin. Nothing the gate itself wrote into the body ever counts as author detail. A thin ticket
+Runs BEFORE the critic, in round 1 only (or after 0c fired); it never repeats on an ordinary
+re-run. A shrunk body would also justify it, but nothing persists a prior body to compare
+against, so that trigger is #147 rather than an unexecutable rule here. Nothing the gate itself wrote into the body ever counts as author detail. A thin ticket
 that would fail purely for missing information is better halted now with targeted questions than
 pushed through a full critique.
 
@@ -358,7 +358,7 @@ newer-marker, check 2 missing type label), **N/A** (check scoped out), or **refe
 (the critic resolves it, e.g. check 4's specific-error heuristic miss). Every outcome
 quotes its evidence line. **Every FAIL becomes a blocking item, classified significant**
 (fundamental only ever comes from the critic or the lens, never from mechanics), merged
-into the Required changes list before
+into the blocking list before
 Step 6 runs: a mechanical failure must never be lost to a clean critic. Warn, N/A, and
 referred never block; a referred item blocks only if the critic fails it. A mechanical failure is a NEEDS-WORK verdict on its own, but ALWAYS continue
 to Step 3B so the author gets the full picture in one round.
@@ -497,12 +497,6 @@ why it resolves the specific objection; include them in the review under the tem
 every other mention points here. The posted comment must be complete, since editing a
 posted review is the post-then-retract failure the Rules forbid.
 
-**On a re-run, carried-forward sections.** Report sections whose content is unchanged are marked
-"carried forward from round <N-1>" rather than re-produced, EXCEPT that any factual anchor in a
-carried section (a file path, route, schema field) that the changed body touches is re-verified
-in this run before posting, per the first Rule; the six-element contract is satisfied by the
-combination.
-
 **Merge rule, phrased for N sources because projects add lenses.** The review carries ONE
 verdict, the strictest across all sources; any blocking item from ANY source blocks; lens
 advisories join the review's advisory list like the critic's; a fundamental from ANY source
@@ -546,20 +540,25 @@ number every re-run rule reads (`<N>` stays the issue number). Computed fields o
 drifts; BLOCKED never appears, those paths returning earlier.
 
 **Every region the gate writes obeys one lifecycle**; per-region answers are how this drifted.
-The regions are `gate-verdict`, `gate-required-changes`, `gate-alternatives` and `gate-decision`
-for #129, written here, plus `gate-context` written by Step 2.9. Each is wrapped in
-`<!-- <name>:start -->` and `<!-- <name>:end -->`, carries its own `###` heading, and is disjoint
-from the others and from author text, which no write touches.
+The regions are `gate-verdict`, `gate-required-changes` and `gate-alternatives`, written here,
+plus `gate-context` written by Step 2.9. Each is wrapped in `<!-- <name>:start -->` and
+`<!-- <name>:end -->`, carries the heading `Gate verdict` / `Required changes (gate)` /
+`Architecture alternatives` / `Codebase context (gate)`, and is disjoint from the others. Writes
+into AUTHOR sections (0c-iv, item 2 below) sit outside this: #147.
 
 1. **Insert or replace, never append.** A second copy is a second answer, and the stale one is
-   indistinguishable from the live one. An absent region is inserted at the top. A body gated
-   before this rule has those sections un-delimited: wrap the first, delete later duplicates.
+   indistinguishable from the live one. An absent region is inserted at the top, unless the
+   step that owns it names a location. A body gated before this rule has those sections
+   un-delimited, or marked `<!-- ticket-gate: populated ... -->`: wrap the first, delete later
+   duplicates.
 2. **Re-read the body first.** 0c-iv writes before the Step 1 fetch and Step 2.9 after it, so
    that cache is stale here; rebuilding from it silently dropped 2.9's write every round.
-3. **Every region is rewritten from THIS round's result, or removed.** No blocking item removes
-   `gate-required-changes`, no fundamental item removes `gate-alternatives`, and 0c-iv removes
-   all five, since it voids the verdict. Keyed on the result, not the verdict: a NEEDS-WORK
-   round that cleared its fundamental would otherwise leave the alternatives standing.
+3. **Every region is rewritten from THIS round's result, or removed.** An empty blocking list
+   removes `gate-required-changes`; no fundamental item this round removes `gate-alternatives`;
+   0c-iv removes all of them, since it voids the verdict. A region this round deliberately
+   REUSES (only `gate-context`, via Step 2.9's cache skip) is left untouched. Keyed on the
+   result, not the verdict: a NEEDS-WORK round that cleared its fundamental would otherwise
+   leave the alternatives standing.
 
 **If blocking is empty, the verdict is PASS** (the Rules define it). Print
 `✅ PASS - Ticket #<N> is ready for implementation`, with the reviewed assumptions in one line.

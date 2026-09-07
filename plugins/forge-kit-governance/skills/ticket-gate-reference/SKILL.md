@@ -8,7 +8,7 @@ description: |
   nothing, and the only rules it carries are the ones a lens itself obeys.
 ---
 
-<!-- ticket-gate-reference-version: 6 -->
+<!-- ticket-gate-reference-version: 7 -->
 
 # ticket-gate reference
 
@@ -107,8 +107,7 @@ These are PAYLOADS only. WHEN each is posted, and what blocks or proceeds after 
 `ticket-gate.md` states: they left that file in #130, so the inline "GitHub reference form" caveat
 no longer reaches them.
 
-**Synthesis void (Step 0c-v, template auto-upgraded).** `<CURRENT_TPL_VER>` is the value 0a read
-from the template directory, never a literal.
+**Synthesis void (Step 0c-v, template auto-upgraded).**
 
 ```markdown
 Template auto-upgraded to v<CURRENT_TPL_VER> - content synthesised
