@@ -54,7 +54,7 @@ budget_for() {
 baseline_for() {
   case "$1" in
     adapt)       echo 7318 ;;
-    ticket-gate) echo 5680 ;;
+    ticket-gate) echo 5406 ;;
     full-review) echo 3998 ;;
     *)           echo 0 ;;
   esac
