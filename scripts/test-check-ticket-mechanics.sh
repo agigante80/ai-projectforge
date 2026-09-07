@@ -116,6 +116,9 @@ odd="$(bash "$SCRIPT" --body "$WORK/odd.md" --template "$WORK/odd.yml" --tpl-ver
 [ "$(printf '%s\n' "$odd" | awk -F'\t' '$2 == "na" { n++ } END { print n+0 }')" -eq 0 ] \
   && ok "REGRESSION: an unrecognised template scores no check 'na', so it cannot pass unchecked" \
   || bad "an unrecognised template still produces na rows"
+# Only check 1 may ever emit `na`, and only for a project with no versioned templates.
+allna="$(run "$(mkbody feature "nacheck.md")" feature | awk -F'\t' '$2 == "na" { print $1 }')"
+[ -z "$allna" ] && ok "REGRESSION: a normal run emits no na row at all" || bad "unexpected na rows: $allna"
 [ "$(printf '%s\n' "$odd" | awk -F'\t' '$2 == "referred" { n++ } END { print n+0 }')" -eq 4 ] \
   && ok "REGRESSION: all four role checks refer to the critic instead" \
   || bad "expected four referred rows on an unrecognised template"
@@ -140,17 +143,8 @@ QA & Security testing|yes
 E2E test scenarios|yes
 Documentation impact|yes
 Codebase Context|no"
-actual_fields="$(awk '
-  /^[[:space:]]*-[[:space:]]*type:[[:space:]]*/ {
-    if (label != "") { print label "|" (req == "true" ? "yes" : "no") }
-    t = $0; sub(/^.*type:[[:space:]]*/, "", t); gsub(/[[:space:]]/, "", t)
-    type = t; label = ""; req = "false"; next
-  }
-  /^      label: / { if (type != "markdown" && label == "") { l = substr($0, 14); sub(/[ \t]+$/, "", l); label = l } }
-  /^      required: / { r = $0; sub(/^.*required:[[:space:]]*/, "", r); gsub(/[[:space:]]/, "", r); req = r }
-  /^          required: true/ { req = "true" }
-  END { if (label != "") { print label "|" (req == "true" ? "yes" : "no") } }
-' "$TPLDIR/feature.yml")"
+actual_fields="$(bash "$SCRIPT" --body "$WORK/ok-feature.md" --template "$TPLDIR/feature.yml" \
+  --dump-fields | tr '\t' '|')"
 if [ "$expected_fields" = "$actual_fields" ]; then
   ok "the field parser matches a hand-written reading of feature.yml"
 else
@@ -186,7 +180,9 @@ body:
 OPT
 printf '<!-- template-version: 6 -->\n\n### Summary\n\nsomething\n\n### E2E test scenarios\n\n_No response_\n' > "$WORK/opt.md"
 optout="$(bash "$SCRIPT" --body "$WORK/opt.md" --template "$WORK/opt.yml" --tpl-version 6 --current-tpl-version 6 --labels backend,feature)"
-expect "an OPTIONAL section left empty is na, not fail" na "$(outcome "$optout" e2e_tests)"
+# `na` would be a fail-open of its own: rules 3 and 7 still bind on an optional section, and
+# nothing looks at an `na` row again.
+expect "an OPTIONAL section left empty is REFERRED, neither fail nor na" referred "$(outcome "$optout" e2e_tests)"
 expect "and check 3 still passes it" pass "$(outcome "$optout" sections)"
 
 # A checkboxes group is required when any of its options is, and that `required` nests deeper than
@@ -300,6 +296,12 @@ rc=$?
 run "$B" feature >/dev/null 2>&1
 [ $? -eq 0 ] && ok "a run with FAIL rows still exits 0, so a fail is data" || bad "a normal run exited non-zero"
 grep -q '# check-ticket-mechanics-version: [0-9]' "$SCRIPT" && ok "carries a version marker" || bad "no version marker"
+# --help prints the header verbatim, so a stale header is a lie told to the caller.
+helptext="$(bash "$SCRIPT" --help)"
+printf '%s' "$helptext" | grep -q 'referred' \
+  && ok "--help describes the current referred-not-na rule" || bad "--help header is stale"
+printf '%s' "$helptext" | grep -q -- '--dump-fields' \
+  && ok "--help documents every flag it accepts" || bad "--help omits a flag"
 
 echo
 echo "check-ticket-mechanics tests: $passed passed, $failed failed"

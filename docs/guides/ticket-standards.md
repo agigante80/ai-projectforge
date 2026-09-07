@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 15 -->
+<!-- doc-rules-version: 16 -->
 
 # Ticket standards (canonical)
 
@@ -168,6 +168,7 @@ can still fork silently, so do not create more of them.
    <!-- anchor: "Apply the rule-1 quality bar" -->
    <!-- anchor: "check 4: GWT structure (rule 1, the checkable half)" -->
    <!-- anchor: "narrower than rule 1's quality" -->
+   <!-- anchor: "the critic must judge rule 1 unaided" -->
 4. Rule 2's integration and regression coverage, and rule 8's implementation concreteness (build
    and test commands, dependency justification, N+1 and scalability), which the critic's brief
    carries as blocking-capable concerns. These joined this doc in #117 (issue #94); before that
@@ -185,6 +186,7 @@ can still fork silently, so do not create more of them.
    as a mechanical check, down to rejecting a bare "add unit tests", and restates the N/A rule's
    own rationale. It was Step 3A prose until #149.
    <!-- anchor: "legitimate only where rule 2 is out of scope" -->
+   <!-- anchor: "the critic must judge rule 2 unaided" -->
 8. Rule 7 in four further places: twice in `check-ticket-mechanics.sh` (check 6's bar and the
    reason it refers rather than passes), the critic's brief, and the Rules section (its
    every-work-ticket scope).
@@ -200,18 +202,12 @@ can still fork silently, so do not create more of them.
    The guard found it on its first run, and #149 moved it from prose into the script.
    <!-- anchor: "UI at all (rule 3), is Step 3B's call" -->
    <!-- anchor: "rule 3 says a UI-touching ticket cannot claim it" -->
+   <!-- anchor: "the critic must judge rule 3 unaided" -->
 
 <!-- restatement-allow: Step 2.5 :: rule 4 :: routing row for the optional
      privacy-regime skill; it states no bar of its own and only notes that rule 4 still binds when
      the skill is absent -->
 
-<!-- restatement-allow: check-ticket-mechanics.sh (top) :: rule 1 :: the row emitted when NO
-     section matched Given/When/Then; it hands the rule to the critic unjudged and states no bar
-     of its own, which is the opposite of a restatement -->
-<!-- restatement-allow: check-ticket-mechanics.sh (top) :: rule 2 :: same shape, for an
-     unmatched unit-test section -->
-<!-- restatement-allow: check-ticket-mechanics.sh (top) :: rule 3 :: same shape, for an
-     unmatched E2E section -->
 
 Editing rule 5 or rule 1 therefore means editing the gate in the same change. The list used to
 claim the hard-fail bars were the *only* exception, which was false, so a maintainer editing rule 5

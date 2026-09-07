@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 43 -->
+<!-- ticket-gate-version: 44 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -348,26 +348,26 @@ project files.
 
 ### Step 3A: Mechanical checks (deterministic, no agent)
 
-Run the script the `ticket-gate-reference` skill ships. Do NOT re-implement its checks in prose:
-prose cannot be tested (#149).
+Run the script the `ticket-gate-reference` skill ships; do NOT re-implement its checks in prose,
+which cannot be tested (#149).
 
 ```bash
-MECH=scripts/check-ticket-mechanics.sh                 # forge-adapt install
-[ -f "$MECH" ] || MECH="$CLAUDE_PLUGIN_ROOT/skills/ticket-gate-reference/assets/${MECH#scripts/}"
+MECH=scripts/check-ticket-mechanics.sh   # forge-adapt install
+# $CLAUDE_PLUGIN_ROOT reaches HOOK processes, not an agent's Bash, so search for the plugin copy:
+[ -f "$MECH" ] || MECH=$(find ~/.claude/plugins -name check-ticket-mechanics.sh 2>/dev/null | head -1)
 "$MECH" --body <body-file> --template <the type's template file> \
   --tpl-version <marker from the body> --current-tpl-version <0a's value> --labels <0b's labels>
 ```
 
-It emits one TSV row per check, `<check>\t<outcome>\t<evidence>`, and exits non-zero ONLY when it
-could not run. If it is absent or fails, record every check as `referred` and say so: improvising
-them is what #149 removed.
+One row per check, `<check>\t<outcome>\t<evidence>`; a non-zero exit means every check is
+`referred` and the review says so.
 
-Outcomes are **pass**, **fail**, **warn**, **na** (did not apply), or **referred** (the script
-could not rule). Neither is a defect in the ticket. **Every FAIL becomes a blocking
+Outcomes are **pass**, **fail**, **warn**, **na** (check 1 only) or **referred**
+(the script could not rule). Neither is a defect in the ticket. **Every FAIL is a blocking
 item, classified significant** (fundamental only ever comes from the critic or the lens, never from
-mechanics), merged into the blocking list before Step 6 runs: a mechanical failure must never be
-lost to a clean critic. Warn, N/A, and referred never block; a referred item blocks only if the
-critic fails it. A mechanical failure is a NEEDS-WORK verdict on its own, but ALWAYS continue to
+mechanics), merged into the blocking list before Step 6: a mechanical failure must never be lost
+to a clean critic. Warn, N/A, and referred never block; a referred item blocks only if the
+critic fails it. A mechanical failure is NEEDS-WORK on its own, but ALWAYS continue to
 Step 3B so the author gets the full picture in one round.
 
 **A `referred` row is a question the script deliberately cannot answer, and Step 3B answers it.**

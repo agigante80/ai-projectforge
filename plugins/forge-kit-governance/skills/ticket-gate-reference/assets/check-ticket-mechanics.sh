@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-ticket-mechanics-version: 3
+# check-ticket-mechanics-version: 4
 #
 # Step 3A's mechanical checks, as a script rather than as prose for the agent to read (#149).
 #
@@ -11,10 +11,14 @@
 #
 # EVERYTHING TEMPLATE-SHAPED IS DERIVED, NEVER HARDCODED. The six work templates do not share a
 # section set: `security`, `design` and `infrastructure` carry no unit-test or E2E section at
-# all, and `bug` calls it "E2E tests" where `feature` says "E2E test scenarios". A check whose
-# section the template does not carry is `na`, because the ticket cannot be faulted for omitting
-# what it was never asked for. Hardcoding feature.yml's names made four templates fail on a
-# perfectly compliant ticket, which is what the first version did.
+# all, and `bug` calls it "E2E tests" where `feature` says "E2E test scenarios". Hardcoding
+# feature.yml's names made four templates fail on a perfectly compliant ticket.
+#
+# A ROLE THE TEMPLATE DOES NOT CARRY IS `referred`, NEVER `na`, and so is an OPTIONAL section
+# left empty. `na` means a check did not apply and nothing looks at it again, so using it for
+# either case makes a rule evaporate silently: a project template that renames its sections, or
+# marks E2E optional, would otherwise score a PASS with those bars unjudged by anyone.
+# Only check 1 emits `na`, for a project with no versioned templates at all.
 #
 # Usage:
 #   check-ticket-mechanics.sh --body FILE --template FILE \
@@ -22,12 +26,16 @@
 #     [--area-labels "..."] [--type-labels "..."]
 #
 # Emits TSV to stdout: <check>\t<outcome>\t<evidence>, outcome in pass|fail|warn|na|referred.
-# Exit 0 whenever the checks ran, so a FAIL is data. Non-zero ONLY when input is unusable,
-# because a run that cannot read its input must never look like a body full of passes.
+# Exit 0 whenever the checks ran, so a FAIL is data, and so is a version it cannot parse. Exit
+# non-zero ONLY when it cannot read the body or the template at all: the gate turns that into
+# every check referred, so anything narrower must be a row instead.
+#
+# --dump-fields prints the parsed <label>\t<required> table and exits, so a test can drive the
+# real parser rather than a copy of it.
 
 set -uo pipefail
 
-BODY=""; TEMPLATE=""; TPL_VERSION=""; CURRENT_TPL_VERSION=""; LABELS=""
+BODY=""; TEMPLATE=""; TPL_VERSION=""; CURRENT_TPL_VERSION=""; LABELS=""; DUMP_FIELDS=0
 # The canonical taxonomy is docs/guides/labels.md. `infrastructure` and `design` are TYPE
 # labels there, not areas, and `frontend` is not a declared label at all. Overridable because
 # labels.md documents adding project-specific area labels.
@@ -48,7 +56,8 @@ while [ $# -gt 0 ]; do
     --labels)              need_value $# "$1"; LABELS="$2"; shift 2 ;;
     --area-labels)         need_value $# "$1"; AREA_LABELS="$2"; shift 2 ;;
     --type-labels)         need_value $# "$1"; TYPE_LABELS="$2"; shift 2 ;;
-    -h|--help)             sed -n '2,27p' "$0"; exit 0 ;;
+    --dump-fields)         DUMP_FIELDS=1; shift ;;
+    -h|--help)             sed -n '2,34p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
@@ -108,6 +117,7 @@ TEMPLATE_FIELDS="$(template_fields)"
 # A template that parses to nothing is unusable input, not a body that passes every check. The
 # first version reported `sections pass` here, a fail-open on the one check that reads it.
 [ -n "$TEMPLATE_FIELDS" ] || die "no fields parsed from template: $TEMPLATE"
+[ "$DUMP_FIELDS" -eq 0 ] || { printf '%s\n' "$TEMPLATE_FIELDS"; exit 0; }
 
 # Which rendered section plays each role, by label shape rather than by a fixed name.
 #
@@ -125,8 +135,9 @@ role_required() {
   printf '%s\n' "$TEMPLATE_FIELDS" | awk -F'\t' -v l="$1" '$1 == l { print $2; exit }' | grep -q yes
 }
 # An OPTIONAL section left empty is what GitHub renders for a field the template did not demand,
-# so it is `na`, not a failure. Check 3 was fixed for this; checks 4 to 6 had the same bug.
-empty_outcome() { if role_required "$1"; then echo fail; else echo na; fi; }
+# so it is not a FAILURE. It is not `na` either: the rule still binds and only the critic can say
+# whether it is met, so an unfilled optional section is REFERRED.
+empty_outcome() { if role_required "$1"; then echo fail; else echo referred; fi; }
 SCENARIOS_LABEL="$(role_label 'given.*when.*then')"
 UNIT_LABEL="$(role_label 'unit test')"
 E2E_LABEL="$(role_label 'e2e|end.to.end')"
