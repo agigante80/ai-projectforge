@@ -76,7 +76,7 @@ extract() {
 # mean "no companion skills", so there is no ambiguity to report.
 classify() {
   extract "$1" | awk '
-    /^skills:[[:space:]]*$/            { print "block"; seen = 1; exit }
+    /^skills:[[:space:]]*(#.*)?$/      { print "block"; seen = 1; exit }
     /^skills:[[:space:]]*\[.*\]/       { print "flow";  seen = 1; exit }
     /^skills:/                         { print "bad";   seen = 1; exit }
     END { if (!seen) print "none" }
@@ -93,7 +93,7 @@ parse() {
       for (i = 1; i <= n; i++) { item = norm(parts[i]); if (item != "") print item }
       next
     }
-    /^skills:[[:space:]]*$/ { inlist = 1; next }     # block: skills: then "  - name" lines
+    /^skills:[[:space:]]*(#.*)?$/ { inlist = 1; next }   # block: skills: then "  - name" lines
     inlist && /^[[:space:]]*-[[:space:]]*/ {
       item = $0
       sub(/^[[:space:]]*-[[:space:]]*/, "", item)
@@ -121,13 +121,24 @@ case "$mode" in
   print) extract "$f" | parse ;;
   names) extract "$f" | parse | bare ;;
   rewrite)
-    tmp="$(mktemp "${TMPDIR:-/tmp}/forge-adapt-skills.XXXXXX")" || exit 2
+    # BESIDE the target, deliberately not in TMPDIR: `mv` is only atomic within one filesystem, and
+    # on the usual tmpfs-plus-disk layout a /tmp temp file degrades the rename into a
+    # copy-then-unlink, which is the half-written-on-interrupt case this is here to prevent.
+    dir="$(dirname "$f")"
+    tmp="$(mktemp "$dir/.forge-adapt-skills.XXXXXX")" || {
+      echo "forge-adapt-agent-skills: cannot create a temp file in '$dir'" >&2; exit 2; }
+    trap 'rm -f "$tmp"' EXIT
     # `cp -p` FIRST so the temp file carries the agent's own mode, then overwrite its contents and
     # `mv` it into place. mv alone would install mktemp's 0600, which no git diff would show; a
-    # plain `cat >` over the original would keep the mode but lose atomicity, leaving the agent
-    # half-written on an interrupt. This keeps both. One declared exception to leaving the file
-    # otherwise untouched: awk terminates every line, so a file with no trailing newline gains one.
-    cp -p "$f" "$tmp" || { rm -f "$tmp"; exit 2; }
+    # plain `cat >` over the original would keep the mode but lose atomicity. This keeps both. One
+    # declared exception to leaving the file otherwise untouched: awk terminates every line, so a
+    # file with no trailing newline gains one.
+    cp -p "$f" "$tmp" || exit 2
+    # A READ-ONLY agent (mode 444) is legitimate, and cp -p stamps that mode onto the temp file
+    # before the shell opens it, so the write would die with a raw shell error instead of one of
+    # this script's own messages. Add the write bit only when the original lacked it, and take it
+    # back before the rename, so the mode still round-trips exactly.
+    ro=0; [ -w "$f" ] || { ro=1; chmod u+w "$tmp" || exit 2; }
     awk "$NORM"'
       { cr = sub(/\r$/, "") ? "\r" : "" }
       NR == 1 && $0 == "---" { infm = 1; print $0 cr; next }
@@ -143,7 +154,7 @@ case "$mode" in
         }
         print head out tail cr; next
       }
-      infm && /^skills:[[:space:]]*$/ { inlist = 1; print $0 cr; next }
+      infm && /^skills:[[:space:]]*(#.*)?$/ { inlist = 1; print $0 cr; next }
       infm && inlist && /^[[:space:]]*-[[:space:]]*/ {
         item = $0
         sub(/^[[:space:]]*-[[:space:]]*/, "", item)
@@ -153,7 +164,9 @@ case "$mode" in
       }
       infm && inlist && /^[^[:space:]]/ { inlist = 0 }
       { print $0 cr }
-    ' "$f" > "$tmp" || { rm -f "$tmp"; exit 2; }
-    mv "$tmp" "$f" || { rm -f "$tmp"; exit 2; }
+    ' "$f" > "$tmp" || exit 2
+    [ "$ro" = 1 ] && { chmod u-w "$tmp" || exit 2; }
+    mv "$tmp" "$f" || exit 2
+    trap - EXIT
     ;;
 esac

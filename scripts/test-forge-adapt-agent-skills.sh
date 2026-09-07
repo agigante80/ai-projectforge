@@ -248,6 +248,38 @@ cp "$T/block.md" "$T/atomic.md"; chmod 600 "$T/atomic.md"
 bash "$SCRIPT" --rewrite "$T/atomic.md"
 eq "--rewrite preserves a non-default mode too" "$(stat -c '%a' "$T/atomic.md")" "600"
 
+# --- round 3: a comment on the `skills:` KEY line is valid YAML and must not abort the install --
+# norm() learned to strip item comments in round 2, but classify() still demanded a bare key line,
+# so this refused with exit 2, which SKILL.md escalates into a full install abort.
+agent "$T/keycomment.md" <<'M'
+---
+name: a
+skills:   # companion skills
+  - forge-kit-governance:gate-lenses
+---
+body
+M
+eq "a comment on the skills: key line still parses" \
+   "$(bash "$SCRIPT" --names "$T/keycomment.md")" "gate-lenses"
+
+# --- round 3: a read-only agent must fail closed with OUR message, not a raw shell error ---------
+cp "$T/block.md" "$T/ro.md"; chmod 444 "$T/ro.md"
+err=$(bash "$SCRIPT" --rewrite "$T/ro.md" 2>&1 >/dev/null); rc=$?
+eq "a read-only agent rewrites rather than dying on the temp write" "$rc" "0"
+eq "and its mode is restored, not widened to writable" "$(stat -c '%a' "$T/ro.md")" "444"
+eq "the read-only rewrite still took effect" \
+   "$(bash "$SCRIPT" "$T/ro.md" | tr '\n' ',')" "gate-lenses,privacy-regime,"
+
+# --- round 3: the rewrite must not depend on TMPDIR, or `mv` is not atomic ----------------------
+# A temp file in /tmp makes the final mv a cross-filesystem copy-then-unlink on the usual
+# tmpfs-plus-disk layout, which is the half-written-on-interrupt case the atomicity fix claimed to
+# close. Pointing TMPDIR at a nonexistent path proves the temp file is created beside the target.
+cp "$T/block.md" "$T/tmpdir.md"
+TMPDIR=/nonexistent-on-purpose bash "$SCRIPT" --rewrite "$T/tmpdir.md"
+eq "--rewrite ignores TMPDIR and works beside the target" \
+   "$(bash "$SCRIPT" "$T/tmpdir.md" | tr '\n' ',')" "gate-lenses,privacy-regime,"
+eq "and leaves no temp file behind" "$(find "$T" -name '.forge-adapt-skills.*' | wc -l)" "0"
+
 # --- fail closed on a missing file, rather than printing nothing and exiting 0 -------------------
 err=$(bash "$SCRIPT" "$T/does-not-exist.md" 2>&1 >/dev/null); rc=$?
 eq "a missing agent file exits 2 (fail closed, not a silent empty list)" "$rc" "2"
