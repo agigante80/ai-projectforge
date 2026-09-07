@@ -2,18 +2,19 @@
 name: ticket-gate-reference
 description: |
   Reference material the ticket-gate agent reads once per run: the review output template it
-  composes, the specialist lens definitions with their result contract, and the two comment
-  templates it posts. Preloaded into
+  composes, the specialist lens definitions with their result contract, the two comment templates
+  it posts, and the `forge_*` call mapping every forge operation looks up. Preloaded into
   ticket-gate through that agent's `skills:` frontmatter. Not a standalone workflow: it decides
   nothing, and the only rules it carries are the ones a lens itself obeys.
 ---
 
-<!-- ticket-gate-reference-version: 4 -->
+<!-- ticket-gate-reference-version: 5 -->
 
 # ticket-gate reference
 
 **`ticket-gate.md` is canonical for every ORCHESTRATOR rule.** It carries the artifacts that agent
-reads once per run: an output template and the lens briefs. The dividing line is who obeys a rule:
+reads once per run: an output template, the lens briefs, the comment templates and the `forge_*`
+call mapping. The dividing line is who obeys a rule:
 a rule the LENS follows travels with its brief below, because the brief is dispatched to the lens
 verbatim; every rule ticket-gate itself follows (when a lens runs, how results merge, what a re-run
 rescopes) stays there and is only POINTED at from here. Nothing is restated across the two, because this repo's own record is that content copied
@@ -102,9 +103,9 @@ lives in `ticket-gate.md` at Step 4, not here.
 ## Comment templates
 
 These are PAYLOADS only. WHEN each is posted, and what blocks or proceeds after it, is decided in
-`ticket-gate.md`. Post them host-aware, with `forge_issue_comment <N> "<body>"` rather than a bare
-`gh` call: these templates left the agent file in #130 and so are outside the "GitHub reference
-form" caveat that covered them while they were inline.
+`ticket-gate.md`. Post them through the call mapping below, under the rule and the legacy fallback
+`ticket-gate.md` states: they left that file in #130, so the inline "GitHub reference form" caveat
+no longer reaches them.
 
 **Clarification (Step 1.5, thin ticket).**
 

@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 35 -->
+<!-- ticket-gate-version: 36 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -53,11 +53,15 @@ source scripts/forge-lib.sh    # installed by the forge-host skill (path may var
 REPO="$(forge_repo)"           # owner/repo on the detected host (replaces {{GITHUB_REPO}})
 ```
 
-**Use the `forge_*` functions for every forge call. Do not call `gh` directly.** The call for
-each need is in the `ticket-gate-reference` skill.
+**Use the `forge_*` functions for every forge call. Do not call `gh` directly.** The call for each
+need, and the templates Steps 1.5, 3C, 4 and 6 read, live in the `ticket-gate-reference` skill.
 
 The `gh …` snippets below are the **GitHub reference form**: apply the `forge_*` equivalent so the
 same logic runs on Forgejo. If `forge-lib.sh` is absent (legacy install), fall back to `gh`.
+
+**That skill is required from Step 0 on**, and a declared skill that is missing is skipped with
+only a debug-log warning. If it is not loaded, return `BLOCKED - REFERENCE_MISSING` before any forge
+call: 0b posts and 0c edits the body, so improvising writes permanently.
 
 ---
 
@@ -208,21 +212,13 @@ gh issue view <NUMBER> --repo {{GITHUB_REPO}} --json labels --jq '.labels[].name
 gh issue view <NUMBER> --repo {{GITHUB_REPO}} --json number,title,body,labels,milestone
 ```
 
-**Reference skill required from Step 1.5 on.** Steps 1.5, 3C, 4 and 6 all read the
-`ticket-gate-reference` skill, and a declared skill that is missing is skipped with only a
-debug-log warning. If it is not loaded, return `BLOCKED - REFERENCE_MISSING` before posting or
-dispatching anything: improvising spends a real sub-agent and posts permanently.
-
 ### Step 1.5: Thin ticket pre-check
 
 Runs BEFORE the critic, in round 1 only (and any re-run whose body SHRANK, or after Step 0c
 fired); it never repeats on an ordinary re-run, because a body that only grows cannot become
-thin. The gate's own appended `### Required changes` checklist is never counted as missing
-detail. The critic does not run until the ticket is sufficiently detailed.
-
-Before the review, assess whether the ticket contains enough implementation detail to
-review meaningfully. A thin ticket that would fail purely for missing information is better
-halted now with targeted questions than pushed through a full critique.
+thin. The gate's own writes (the `gate-verdict` block, `### Required changes`) never count as
+author detail. A thin ticket that would fail purely for missing information is better halted
+now with targeted questions than pushed through a full critique.
 
 Launch a `general-purpose` sub-agent with the issue title and full body. Ask it to evaluate:
 1. Does the ticket have specific acceptance criteria (not just a description)?
@@ -280,9 +276,9 @@ over adding an agent; add an agent only for a genuinely independent domain persp
 
 After selecting the review set, assess whether the ticket needs research before the critique.
 **On a re-run**, this step runs ONLY for a technology, dependency, or regulation the delta newly
-introduces (auto-remediation's own edits never qualify). The prior round's research is recovered
-from the previous round's `gate-verdict` body block and supplied to the critic, so element
-5 stays sourced without re-searching.
+introduces (auto-remediation's own edits never qualify). Prior research is NOT recoverable: it
+lived in the comment nothing reads back, and the verdict block carries computed fields only. So
+element 5 is marked carried-forward per Step 4 rather than re-sourced.
 
 **Complexity signals (any 2+ triggers deep research):**
 - Ticket touches 3+ packages or services
@@ -319,7 +315,7 @@ state.
 
 **1. Check if `codebase_context` is already populated**, in the issue body ALREADY FETCHED
 in Step 1 (never a fresh forge call):
-- If the section has non-placeholder content AND the previous round's verdict carried no
+- If the section has non-placeholder content AND the `gate-verdict` block carried no
   fundamental item: skip re-exploration. Log: `codebase context: using cached findings from
   previous gate run`.
 - After a fundamental round the cache is VOID (an adopted alternative can target different
@@ -533,8 +529,7 @@ the optional `### Security lens` and `### Architecture alternatives` slots.
 ### Step 5: Post to GitHub
 
 **Two artifacts, one writer each.** The review is a COMMENT, never edited: the audit trail,
-leaving the author's text alone. Its summary goes in the BODY at Step 6, because nothing reads
-a comment back: `forge_*` has no read-comments primitive, and humans triage bodies.
+leaving the author's text alone. Its summary goes in the BODY at Step 6.
 
 ```bash
 gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "<review>"
@@ -542,24 +537,44 @@ gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "<review>"
 
 ### Step 6: Return result and auto-remediate
 
-**If the verdict is PASS** (all mechanical checks pass, no blocking items from critic or
-lens): print `✅ PASS - Ticket #<N> is ready for implementation`, with the reviewed
-assumptions restated in one line.
+**The `gate-verdict` block is written on EVERY path below, PASS included.** A cleared ticket still
+carrying the last round's NEEDS-WORK is the stale state it prevents, and it is the run's only
+durable output: `forge_*` has no read-comments primitive, and humans triage bodies. Insert at the
+top when absent, replace between delimiters when present, touch nothing outside them:
 
-**If blocking is empty (which requires every mechanical check at pass, warn, N/A, or
-critic-cleared referred: mechanical FAILs are blocking items and land here) and advisory
-items exist: the verdict is PASS** (advisory never blocks). Print the PASS line; optionally create follow-up tickets for advisory clusters
-(`gh issue create ... (source: #<N>)`) and print
-`✅ PASS (deferred). Ticket #<N> cleared; <N> follow-up ticket(s) created.` This path never
-enters auto-remediation and never prints NEEDS-WORK.
+```markdown
+<!-- gate-verdict:start -->
+### Gate verdict (round <N>)
+**Verdict:** <PASS or NEEDS-WORK>
+- <class>: <blocking item, one line each; omit on PASS>
+Full review: the latest `## Ticket Readiness Review` comment on this issue.
+<!-- gate-verdict:end -->
+```
+
+```bash
+gh issue edit <NUMBER> --repo {{GITHUB_REPO}} --body "<updated body>"
+```
+
+`<N>` is 1 when the Step 1 body carries no block, else that block's round plus 1: the round number
+every re-run rule reads. Computed fields only, so nothing drifts; BLOCKED never appears, those
+paths returning earlier. **Only this step writes the body after the Step 1 fetch** (0c-iv, the
+other writer, precedes it), which is why the block lands here and not at Step 5: this step rebuilds
+the body from that cache, so an earlier write is clobbered. Its regions are disjoint:
+`gate-verdict`, `### Required changes (gate)`, `decision` for #129.
+
+**If blocking is empty, the verdict is PASS** (the Rules define it). Print
+`✅ PASS - Ticket #<N> is ready for implementation`, with the reviewed assumptions in one line.
+Where advisories exist, optionally create follow-up tickets for their clusters
+(`gh issue create ... (source: #<N>)`) and print instead
+`✅ PASS (deferred). Ticket #<N> cleared; <N> follow-up ticket(s) created.` PASS never enters
+auto-remediation and never prints NEEDS-WORK.
 
 **If the verdict is NEEDS-WORK (blocking non-empty):**
 
 The blocking items arrive pre-classified by the judging agents' `class` fields (critic and lens
-alike). **Fundamental** is defined in Step 3B, where the classification rule lives; here that means the
-architecture alternatives were already generated at Step 4 and posted with the review, and
-auto-remediation copies them into the issue body. **Significant**: the approach stands but
-blocking gaps exist.
+alike), per Step 3B. A **fundamental** item's architecture alternatives were generated
+at Step 4 and posted with the review; auto-remediation copies them into the body. **Significant**:
+the approach stands but blocking gaps exist.
 
 **Default behaviour: auto-remediate without prompting.**
 
@@ -571,27 +586,7 @@ Build an updated issue body:
 4. If architecture alternatives were generated, append an `### Architecture alternatives`
    section with the 2 to 3 options
 
-5. Write the `gate-verdict` block ALWAYS, including on a PASS. Insert it at the top when
-   absent, replace between the delimiters when present, touch nothing outside them:
-
-```markdown
-<!-- gate-verdict:start -->
-### Gate verdict (round <N>)
-**Verdict:** <PASS or NEEDS-WORK>
-- <class>: <blocking item, one line each; omit on PASS>
-Full review: the `## Ticket Readiness Review` comment on this issue.
-<!-- gate-verdict:end -->
-```
-
-Computed fields only, so nothing can drift; BLOCKED never appears, since those paths return
-earlier. **This step is the body's only writer**, which is why the block lands here: it
-rebuilds the body from the Step 1 cache, so anything written at Step 5 would be clobbered.
-Its regions are disjoint: `gate-verdict`, `### Required changes (gate)`, `decision` for #129.
-
-Update the issue:
-```bash
-gh issue edit <NUMBER> --repo {{GITHUB_REPO}} --body "<updated body>"
-```
+Apply it together with the verdict block, in the single edit above.
 
 Print:
 ```
@@ -610,8 +605,7 @@ Instead of auto-remediating, present severity-aware options and wait for user re
 | Fundamental (approach rejected) | 1. Auto-remediate issue body (with architecture alternatives)  2. Post remediation guide as forge comment  *(no override)* |
 | Significant (blocking gaps)     | 1. Auto-remediate issue body  2. Post remediation guide as forge comment  3. Override and proceed |
 
-(An advisory-only result is PASS and never reaches prompt mode; its follow-up-ticket option
-lives on the PASS path in Step 6.)
+(An advisory-only result is PASS and never reaches prompt mode.)
 
 **Option 2 (remediation guide):** post the REMEDIATION template from the reference skill.
 
@@ -647,13 +641,14 @@ single-step rule here is what put the re-run rules 400 lines from the steps they
   its derived scope; both live in the critic's brief, and their "none"/N/A CLAIMS are judged,
   never waved through.
 - **PASS requires: every mechanical check passing AND zero blocking items** from the critic
-  and any lens that ran. Advisory items never block.
+  and any lens that ran. A mechanical FAIL IS a blocking item; pass, warn, N/A and
+  critic-cleared referred are not. Advisory items never block.
 - **Feedback must be specific.** "Needs improvement" is not acceptable. Every blocking item
   states exactly what to add or fix.
 - **Re-runs: mechanical checks in full, critique on the delta.** The mechanical checks
   (Step 3A) ALWAYS re-run completely: they are near-free and the body is guaranteed to have
   changed (auto-remediation writes into it; a fix to one section can break another, e.g. a
   scenario rewrite merging two behaviours into one block). The CRITIC's scope narrows to
-  the previously blocking items plus the sections that changed (read the prior review
-  comment to recover them; a fresh run has no memory). State what was re-checked and what
-  carries forward. The critique target must not grow between rounds.
+  the previously blocking items plus the sections that changed (recovered from the
+  `gate-verdict` block, which is why it carries them; a fresh run has no memory). State what
+  was re-checked and what carries forward. The critique target must not grow between rounds.
