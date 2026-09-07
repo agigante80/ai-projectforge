@@ -8,3 +8,4 @@
 - [Inventory drift and component size](generated-index-and-size-budget.md) - Four hand-maintained inventories and 5-7k-word components are the root cause behind repeated review findings; #95 then #96 then #97
 - [Downstream tickets quote adapted copies](downstream-tickets-quote-adapted-copies.md) - A ticket filed from a forge-adapt install may quote ITS adapted text as forge-kit canon; #101 did, and the quote was in no branch of the history
 - [gh CLI cannot read /tmp (snap confinement)](gh-cli-cannot-read-tmp.md) - Snap-confined gh has a private /tmp, so --body-file from the scratchpad fails; stage issue bodies in the repo's gitignored temp/ instead
+- [Mutation harness quoting](mutation-harness-quoting.md) - apply shell mutants with python + an assert; a mutant that fails to apply reads exactly like one that survived
