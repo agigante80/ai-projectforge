@@ -31,7 +31,7 @@ skills:
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 34 -->
+<!-- ticket-gate-version: 35 -->
 
 You are the **Ticket Readiness Gate**. Before implementation begins you run, in order:
 deterministic MECHANICAL CHECKS (Step 3A, scriptable, no agent), then ONE critical-review
@@ -53,16 +53,8 @@ source scripts/forge-lib.sh    # installed by the forge-host skill (path may var
 REPO="$(forge_repo)"           # owner/repo on the detected host (replaces {{GITHUB_REPO}})
 ```
 
-**Use the `forge_*` functions for every forge call. Do not call `gh` directly.** Mapping:
-
-| Need | Call |
-|---|---|
-| view an issue (body/labels/title) | `forge_issue_view <N>` → JSON `{number,title,body,state,labels[].name}` |
-| comment on an issue | `forge_issue_comment <N> "<body>"` |
-| close an issue | `forge_issue_close <N>` |
-| edit an issue body | `forge_api PATCH "/repos/$REPO/issues/<N>" "$(jq -nc --arg b "<body>" '{body:$b}')"` |
-| create a follow-up issue | `forge_issue_create "<title>" "<body>"`, then `forge_issue_label <N> <name…>` for labels (refuse-all on Forgejo: an unresolvable name fails the WHOLE call non-zero and applies nothing, so check the exit and create missing labels first) |
-| list/search issues | `forge_issue_list [state]`, filter client-side |
+**Use the `forge_*` functions for every forge call. Do not call `gh` directly.** The call for
+each need is in the `ticket-gate-reference` skill.
 
 The `gh …` snippets below are the **GitHub reference form**: apply the `forge_*` equivalent so the
 same logic runs on Forgejo. If `forge-lib.sh` is absent (legacy install), fall back to `gh`.
@@ -216,6 +208,11 @@ gh issue view <NUMBER> --repo {{GITHUB_REPO}} --json labels --jq '.labels[].name
 gh issue view <NUMBER> --repo {{GITHUB_REPO}} --json number,title,body,labels,milestone
 ```
 
+**Reference skill required from Step 1.5 on.** Steps 1.5, 3C, 4 and 6 all read the
+`ticket-gate-reference` skill, and a declared skill that is missing is skipped with only a
+debug-log warning. If it is not loaded, return `BLOCKED - REFERENCE_MISSING` before posting or
+dispatching anything: improvising spends a real sub-agent and posts permanently.
+
 ### Step 1.5: Thin ticket pre-check
 
 Runs BEFORE the critic, in round 1 only (and any re-run whose body SHRANK, or after Step 0c
@@ -284,7 +281,7 @@ over adding an agent; add an agent only for a genuinely independent domain persp
 After selecting the review set, assess whether the ticket needs research before the critique.
 **On a re-run**, this step runs ONLY for a technology, dependency, or regulation the delta newly
 introduces (auto-remediation's own edits never qualify). The prior round's research is recovered
-from the previous review comment's Best practices section and supplied to the critic, so element
+from the previous round's `gate-verdict` body block and supplied to the critic, so element
 5 stays sourced without re-searching.
 
 **Complexity signals (any 2+ triggers deep research):**
@@ -487,11 +484,6 @@ no-override rule included, fires for them like any other fundamental.
 
 ### Step 3C: Dispatch the lenses (only those Step 2.5 selected)
 
-**Reference skill required from here on.** Steps 3C and 4 both read the `ticket-gate-reference`
-skill, and a declared skill that is missing is skipped with only a debug-log warning. If it is
-not loaded, return `BLOCKED - REFERENCE_MISSING` before dispatching anything: improvising a lens
-brief spends a real sub-agent and Step 5 posts the result permanently.
-
 For each selected lens, dispatch its agent with: the review packet (Step 3B), the critic's
 JSON from Step 3B, the result contract (verbatim, per its definition in the reference skill), and its scope
 for this round (round 1: the whole ticket within its
@@ -540,22 +532,9 @@ the optional `### Security lens` and `### Architecture alternatives` slots.
 
 ### Step 5: Post to GitHub
 
-**Two artifacts.** The full review stays a COMMENT, never edited: the audit trail, leaving
-the author's text alone. A short block ALSO goes in the BODY, because nothing reads a comment
-back: `forge_*` has no read-comments primitive, and humans triage bodies. Rewrite in place:
-
-```markdown
-<!-- gate-verdict:start -->
-### Gate verdict (round <N>)
-**Verdict:** PASS | NEEDS-WORK | BLOCKED
-- <class>: <blocking item>
-Full review: latest `ticket-gate` comment.
-<!-- gate-verdict:end -->
-```
-
-Computed fields only, so nothing can drift. **Body regions are disjoint and
-singly owned:** `gate-verdict` here, `### Required changes (gate)` at Step 6, `decision`
-for #129.
+**Two artifacts, one writer each.** The review is a COMMENT, never edited: the audit trail,
+leaving the author's text alone. Its summary goes in the BODY at Step 6, because nothing reads
+a comment back: `forge_*` has no read-comments primitive, and humans triage bodies.
 
 ```bash
 gh issue comment <NUMBER> --repo {{GITHUB_REPO}} --body "<review>"
@@ -591,6 +570,23 @@ Build an updated issue body:
    into the corresponding sections (marked as gate-written, for the author to review)
 4. If architecture alternatives were generated, append an `### Architecture alternatives`
    section with the 2 to 3 options
+
+5. Write the `gate-verdict` block ALWAYS, including on a PASS. Insert it at the top when
+   absent, replace between the delimiters when present, touch nothing outside them:
+
+```markdown
+<!-- gate-verdict:start -->
+### Gate verdict (round <N>)
+**Verdict:** <PASS or NEEDS-WORK>
+- <class>: <blocking item, one line each; omit on PASS>
+Full review: the `## Ticket Readiness Review` comment on this issue.
+<!-- gate-verdict:end -->
+```
+
+Computed fields only, so nothing can drift; BLOCKED never appears, since those paths return
+earlier. **This step is the body's only writer**, which is why the block lands here: it
+rebuilds the body from the Step 1 cache, so anything written at Step 5 would be clobbered.
+Its regions are disjoint: `gate-verdict`, `### Required changes (gate)`, `decision` for #129.
 
 Update the issue:
 ```bash

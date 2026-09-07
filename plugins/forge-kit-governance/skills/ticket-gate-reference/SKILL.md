@@ -8,7 +8,7 @@ description: |
   nothing, and the only rules it carries are the ones a lens itself obeys.
 ---
 
-<!-- ticket-gate-reference-version: 3 -->
+<!-- ticket-gate-reference-version: 4 -->
 
 # ticket-gate reference
 
@@ -101,9 +101,10 @@ lives in `ticket-gate.md` at Step 4, not here.
 
 ## Comment templates
 
-Both are posted with `gh issue comment <NUMBER> --repo <repo> --body "$(cat <<'EOF' ... EOF)"`.
-WHEN each is used, and what blocks or proceeds after it, is decided in `ticket-gate.md`; these are
-the payloads only.
+These are PAYLOADS only. WHEN each is posted, and what blocks or proceeds after it, is decided in
+`ticket-gate.md`. Post them host-aware, with `forge_issue_comment <N> "<body>"` rather than a bare
+`gh` call: these templates left the agent file in #130 and so are outside the "GitHub reference
+form" caveat that covered them while they were inline.
 
 **Clarification (Step 1.5, thin ticket).**
 
@@ -129,3 +130,17 @@ Answering in the body ensures the next gate run can review the complete spec.
 - [ ] <required change 1>
 - [ ] <required change 2>
 ```
+
+## forge_* call mapping
+
+Which adapter call serves each need. The RULE, that every forge call goes through `forge_*` and
+never through `gh` directly, is in `ticket-gate.md`; this is the lookup.
+
+| Need | Call |
+|---|---|
+| view an issue (body/labels/title) | `forge_issue_view <N>` → JSON `{number,title,body,state,labels[].name}` |
+| comment on an issue | `forge_issue_comment <N> "<body>"` |
+| close an issue | `forge_issue_close <N>` |
+| edit an issue body | `forge_api PATCH "/repos/$REPO/issues/<N>" "$(jq -nc --arg b "<body>" '{body:$b}')"` |
+| create a follow-up issue | `forge_issue_create "<title>" "<body>"`, then `forge_issue_label <N> <name…>` for labels (refuse-all on Forgejo: an unresolvable name fails the WHOLE call non-zero and applies nothing, so check the exit and create missing labels first) |
+| list/search issues | `forge_issue_list [state]`, filter client-side |
