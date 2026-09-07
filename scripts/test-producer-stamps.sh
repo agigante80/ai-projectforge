@@ -75,8 +75,10 @@ mk "$T/many/g/commands/b.md" <<'M'
 <!-- template-version: 5 -->
 M
 out=$(bash "$SCRIPT" "$T/many" 2>&1)
-n=$(printf '%s\n' "$out" | grep -c 'template-version:')
-[ "$n" -ge 2 ] && ok "every offender is reported, not only the first" || bad "reports all offenders (got $n)"
+# Count the HIT lines only. Counting every "template-version:" in the output made this vacuous:
+# the guard's own advice trailer names the marker, so one offender already satisfied -ge 2.
+n=$(printf '%s\n' "$out" | grep -c '^  x ')
+[ "$n" -eq 2 ] && ok "every offender is reported, not only the first" || bad "reports all offenders (got $n)"
 
 # --- fail closed on a missing root, never pass vacuously ----------------------------------------
 bash "$SCRIPT" "$T/does-not-exist" >/dev/null 2>&1
@@ -86,6 +88,23 @@ bash "$SCRIPT" "$T/does-not-exist" >/dev/null 2>&1
 mkdir -p "$T/empty"
 bash "$SCRIPT" "$T/empty" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "a tree with no files passes rather than reading as broken" || bad "empty tree passes"
+
+# --- an UNREADABLE subtree must fail closed, not read as "no matches" ---------------------------
+# grep exits 2 on a read error, and swallowing that made an unreadable tree containing an
+# offending producer go green: the same vacuous pass the missing-root case exists to prevent.
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  skip: unreadable-subtree case (running as root, which can read anything)"
+else
+  mk "$T/unreadable/g/agents/a.md" <<'M'
+clean file
+M
+  mkdir -p "$T/unreadable/g/secret"; printf '<!-- template-version: 4 -->\n' > "$T/unreadable/g/secret/x.md"
+  chmod 000 "$T/unreadable/g/secret"
+  bash "$SCRIPT" "$T/unreadable" >/dev/null 2>&1; rc=$?
+  chmod 755 "$T/unreadable/g/secret"
+  [ "$rc" -eq 2 ] && ok "an unreadable subtree fails closed rather than passing clean" \
+    || bad "unreadable subtree fails closed (rc=$rc)"
+fi
 
 # --- the real repo must pass, or the guard is not actually adopted -------------------------------
 bash "$SCRIPT" >/dev/null 2>&1

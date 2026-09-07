@@ -29,9 +29,18 @@ else
 fi
 [ -d "$ROOT" ] || { echo "check-producer-stamps: '$ROOT' is not a directory" >&2; exit 2; }
 
-# -r so a tree with no files is a clean pass rather than a grep error: a project may legitimately
-# ship no producers at all.
-hits="$(grep -rnE 'template-version:[[:space:]]*[0-9]' "$ROOT" 2>/dev/null || true)"
+# grep's three exit statuses are all meaningful here and must stay distinguishable: 0 found, 1 a
+# clean tree (a project may legitimately ship no producers), anything else a READ ERROR. Collapsing
+# them with `|| true` made an unreadable subtree containing an offending producer pass clean, which
+# is the same vacuous pass the missing-root check exists to prevent.
+err="$(mktemp)"; trap 'rm -f "$err"' EXIT
+hits="$(grep -rnE 'template-version:[[:space:]]*[0-9]' "$ROOT" 2>"$err")"; grc=$?
+
+if [ "$grc" -gt 1 ]; then
+  echo "check-producer-stamps: could not scan '$ROOT' (grep exit $grc)" >&2
+  sed 's|^|  |' "$err" >&2
+  exit 2
+fi
 
 if [ -n "$hits" ]; then
   echo "check-producer-stamps: hardcoded template-version stamp(s) found." >&2
