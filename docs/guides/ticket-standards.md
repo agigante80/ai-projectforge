@@ -1,5 +1,5 @@
 <!-- template-version: 6 -->
-<!-- doc-rules-version: 8 -->
+<!-- doc-rules-version: 9 -->
 
 # Ticket standards (canonical)
 
@@ -129,33 +129,60 @@ domain, per the N/A rule below.
 ## Precedence
 
 `ticket-gate` restates parts of this doc so they hold in installs without it. Those restatements
-are sanctioned exceptions to the single-source rule above. **This list is hand-maintained, and it
-is not a certification.** Three consecutive review rounds each found it incomplete, so read it as
-the best known set: a restatement not listed here is still a fork and a bug, but absence from this
-list is NOT evidence that no restatement exists. Deriving it mechanically is tracked in #125; until then,
-grep the gate for the rule you are editing rather than trusting this list to be exhaustive.
+are sanctioned exceptions to the single-source rule above. **This list is complete, and
+`scripts/check-restatements.sh` is what makes that claim safe to believe** (issue #125). Each item
+carries one or more literal ANCHORS into the gate; CI fails if an anchor no longer resolves (a
+stale entry) or if the gate references a rule in a section no anchor covers (an unlisted
+restatement). Editing a rule means editing every location its anchors name, in the same change.
+
+The claim used to be hand-maintained, and it was false every time it was made: three consecutive
+review rounds on PR #123 each found more entries. Adding an item without an anchor fails the build,
+because an unanchored entry is exactly the thing that rotted before.
 
 1. The three hard-fail bars: UI E2E (rule 3), API endpoint coverage (rule 2), and the
-   personal-data judgment (rule 4).
-2. The security lens checklist, which restates rule 5 point for point.
+   personal-data judgment (rule 4), in the critic's brief.
+   <!-- anchor: "**UI E2E (rule 3):**" -->
+   <!-- anchor: "**API endpoint coverage (rule 2):**" -->
+   <!-- anchor: "**Personal-data judgment (rule 4):**" -->
+2. The security lens checklist, which restates rule 5 point for point. It lives in the
+   `ticket-gate-reference` skill since #109, not in the agent file.
+   <!-- anchor: "OWASP Top 10: injection, XSS, CSRF" -->
 3. Rule 1's GWT quality bar, which appears twice: in the Step 0c-iii synthesis table and in Step 3A
    check 4.
+   <!-- anchor: "Apply the rule-1 quality bar" -->
+   <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
 4. Rule 2's integration and regression coverage, and rule 8's implementation concreteness (build
    and test commands, dependency justification, N+1 and scalability), which the critic's brief
    carries as blocking-capable concerns. These joined this doc in #117 (issue #94); before that
    they existed only in the gate, so the list did not need them.
+   <!-- anchor: "test-case quality and edge cases, including integration and regression coverage" -->
+   <!-- anchor: "file paths and implementation concreteness" -->
 5. Rule 3's emulator clause, which the critic's brief restates near-verbatim. Item 1 covers rule
    3's UI E2E hard-fail bar, which is a different clause of the same rule.
+   <!-- anchor: "rule 3's emulator clause" -->
 6. The Step 0c-iii synthesis table, whose rows restate the SHAPE required by rules 2, 3, 4 and 7,
    because the synthesis sub-agent has to be told what to write. Item 3 covers rule 1's appearance
    in that same table; these are the other four.
+   <!-- anchor: "| Section | Derived from |" -->
 7. Step 3A check 5, which restates rule 2's concrete-spec bar as a mechanical check, down to
    rejecting a bare "add unit tests", and also restates the N/A rule's own rationale.
-8. Rule 7 in three further places: Step 3A check 6 (the bar), the critic's brief ("documentation
-   currency (rule 7) judged against the ticket's own file list"), and the Rules section (its
-   every-work-ticket scope).
-9. Rule 1's SCOPE clause at Step 3B ("an N/A claim is legitimate only where no behaviour delta
-   exists"). Item 3 covers rule 1's quality bar, which is a different clause.
+   <!-- anchor: "legitimate only where the gate derives rule 2 out of scope" -->
+8. Rule 7 in three further places: Step 3A check 6 (the bar), the critic's brief, and the Rules
+   section (its every-work-ticket scope).
+   <!-- anchor: "**Documentation impact present**" -->
+   <!-- anchor: "documentation currency (rule 7) judged against the ticket's own file list" -->
+   <!-- anchor: "documentation currency (rule 7) applies to every work ticket" -->
+9. Rule 1's SCOPE clause at Step 3B. Item 3 covers rule 1's quality bar, which is a different
+   clause.
+   <!-- anchor: "an N/A claim is legitimate only where no behaviour delta exists" -->
+10. Rule 3's UI E2E hard-fail bar AGAIN, restated as Step 3A's mechanical check. Item 1 covers the
+   same bar in the critic's brief; this is the mechanical half, and no review round ever named it.
+   The guard found it on its first run.
+   <!-- anchor: "E2E specs is BLOCKING (rule 3)" -->
+
+<!-- restatement-allow: Step 2.5 :: rule 4 :: routing row for the optional
+     privacy-regime skill; it states no bar of its own and only notes that rule 4 still binds when
+     the skill is absent -->
 
 Editing rule 5 or rule 1 therefore means editing the gate in the same change. The list used to
 claim the hard-fail bars were the *only* exception, which was false, so a maintainer editing rule 5

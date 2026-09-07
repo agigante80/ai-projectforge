@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# Contract test for check-restatements.sh (issue #125).
+#
+# WHY THIS GUARD EXISTS. ticket-standards.md's Precedence section enumerates every place
+# ticket-gate is allowed to restate a doc rule, and it used to certify itself complete. That claim
+# was false every time it was made: three consecutive review rounds on PR #123 each found more
+# entries, nine and counting. A maintainer who trusts a list like that edits one rule and ships a
+# fork in the exact place the doc calls drift-free. This is the same defect class the repo already
+# converted to guards twice (#96 the component inventory, #104 the label taxonomy).
+#
+# WHY DECLARED ANCHORS RATHER THAN FINGERPRINTS. The ticket proposed matching normalised phrases
+# against paraphrased prose and accepted false positives. Declared anchors get both directions with
+# NO fuzzy matching: a stale entry is an anchor that no longer resolves, and an unlisted restatement
+# is a rule reference in a section no anchor covers. The cost is that an author must name the
+# location, which is the thing they were getting wrong anyway.
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT="$HERE/check-restatements.sh"
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+
+pass=0
+fail=0
+ok()  { echo "  ok: $1"; pass=$((pass + 1)); }
+bad() { echo "  FAIL: $1"; fail=$((fail + 1)); }
+
+# A fixture pair: a doc with a Precedence list, and a gate that restates rules.
+mkfix() {                     # mkfix <dir> <precedence-items-file> <gate-file>
+  mkdir -p "$1/docs/guides" "$1/gate"
+  { echo "# Ticket standards"; echo; echo "## Precedence"; echo
+    cat "$2"; echo; echo "## The N/A rule (load-bearing)"; echo "text"; } > "$1/docs/guides/ticket-standards.md"
+  cp "$3" "$1/gate/ticket-gate.md"
+}
+
+cat > "$T/gate-ok.md" <<'G'
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+### Step 3B: The critic
+- **UI E2E (rule 3):** a ticket touching any UI needs E2E specs
+G
+cat > "$T/items-ok.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+2. Rule 3's UI E2E hard-fail bar in the critic's brief. <!-- anchor: "**UI E2E (rule 3):**" -->
+I
+
+# --- matching: both directions clean ------------------------------------------------------------
+mkfix "$T/a" "$T/items-ok.md" "$T/gate-ok.md"
+out=$(bash "$SCRIPT" "$T/a/docs/guides/ticket-standards.md" "$T/a/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "a complete, accurate list passes" || bad "complete list passes (rc=$rc: $out)"
+
+# --- found-but-unlisted: the gate cites a rule in a section no anchor covers ---------------------
+cat > "$T/items-missing.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+I
+mkfix "$T/b" "$T/items-missing.md" "$T/gate-ok.md"
+out=$(bash "$SCRIPT" "$T/b/docs/guides/ticket-standards.md" "$T/b/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "an unlisted restatement fails the build" || bad "unlisted restatement fails"
+case "$out" in *"rule 3"*) ok "and it names the rule that is unlisted" ;;
+               *) bad "names the unlisted rule (got: $out)" ;; esac
+case "$out" in *"Step 3B"*) ok "and the section it was found in" ;;
+               *) bad "names the section (got: $out)" ;; esac
+
+# --- listed-but-absent: an anchor that no longer resolves ----------------------------------------
+cat > "$T/items-stale.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+2. Rule 3's UI E2E hard-fail bar in the critic's brief. <!-- anchor: "**UI E2E (rule 3):**" -->
+3. Rule 9's retired bar. <!-- anchor: "this text was deleted from the gate" -->
+I
+mkfix "$T/c" "$T/items-stale.md" "$T/gate-ok.md"
+out=$(bash "$SCRIPT" "$T/c/docs/guides/ticket-standards.md" "$T/c/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "a stale list entry fails the build (the other direction)" || bad "stale entry fails"
+case "$out" in *"this text was deleted"*) ok "and it quotes the anchor that no longer resolves" ;;
+               *) bad "quotes the dead anchor (got: $out)" ;; esac
+
+# --- an item with NO anchor is itself a failure, or the list rots silently -----------------------
+cat > "$T/items-noanchor.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+2. Rule 3's UI E2E bar, described but never anchored.
+I
+mkfix "$T/d" "$T/items-noanchor.md" "$T/gate-ok.md"
+out=$(bash "$SCRIPT" "$T/d/docs/guides/ticket-standards.md" "$T/d/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -ne 0 ] && ok "an item with no anchor fails (it can never be checked)" || bad "unanchored item fails"
+
+# --- the allowlist lets a genuine non-restatement mention through, with a reason -----------------
+cat > "$T/gate-pointer.md" <<'G'
+### Step 2.5: Select the review set
+| Privacy regime | label `privacy` | appends rule 4 obligations, no restatement |
+### Step 3A: Mechanical checks
+4. **GWT structure** (rule 1 quality bar, the checkable half)
+G
+cat > "$T/items-allow.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: Step 2.5 :: rule 4 :: routing pointer, states no bar of its own -->
+I
+mkfix "$T/e" "$T/items-allow.md" "$T/gate-pointer.md"
+out=$(bash "$SCRIPT" "$T/e/docs/guides/ticket-standards.md" "$T/e/gate/ticket-gate.md" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "an allowlisted pointer passes" || bad "allowlisted pointer passes (rc=$rc: $out)"
+
+cat > "$T/items-allow-noreason.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: Step 2.5 :: rule 4 -->
+I
+mkfix "$T/f" "$T/items-allow-noreason.md" "$T/gate-pointer.md"
+bash "$SCRIPT" "$T/f/docs/guides/ticket-standards.md" "$T/f/gate/ticket-gate.md" >/dev/null 2>&1
+[ $? -ne 0 ] && ok "an allowlist entry with no reason is refused" || bad "allowlist demands a reason"
+
+# A prefix match must still name a REAL section, or the allowlist becomes a mute button.
+cat > "$T/items-allow-wrong.md" <<'I'
+1. Rule 1's quality bar as a mechanical check. <!-- anchor: "(rule 1 quality bar, the checkable half)" -->
+
+<!-- restatement-allow: Step 9.9 :: rule 4 :: names a section that does not exist -->
+I
+mkfix "$T/g" "$T/items-allow-wrong.md" "$T/gate-pointer.md"
+bash "$SCRIPT" "$T/g/docs/guides/ticket-standards.md" "$T/g/gate/ticket-gate.md" >/dev/null 2>&1
+[ $? -ne 0 ] && ok "an allowlist entry for the wrong section does not silence the real one" \
+  || bad "allowlist prefix must still match a real section"
+
+# --- fail closed on a missing input, never pass vacuously ----------------------------------------
+bash "$SCRIPT" "$T/nope.md" "$T/gate-ok.md" >/dev/null 2>&1
+[ $? -ne 0 ] && ok "a missing doc fails closed" || bad "missing doc fails closed"
+bash "$SCRIPT" "$T/a/docs/guides/ticket-standards.md" "$T/nope.md" >/dev/null 2>&1
+[ $? -ne 0 ] && ok "a missing gate fails closed" || bad "missing gate fails closed"
+
+# --- the real repo must pass, or this guard is not actually adopted ------------------------------
+ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
+out=$(bash "$SCRIPT" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "the repo's own Precedence list is complete and current" \
+  || bad "repo Precedence list (rc=$rc): $out"
+
+echo ""
+echo "check-restatements tests: $pass passed, $fail failed"
+[ "$fail" -eq 0 ]
