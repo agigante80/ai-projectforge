@@ -22,9 +22,10 @@ triggered on `pull_request` and `push: [main]` only, so with no PRs there was **
 at all** and every check ran for the first time after the merge to main. Fixed by adding `develop`
 to the push branches; a code review found it, not the workflow change itself.
 
-The second still stands. Both range guards (`check-version-bump.sh`,
-`check-plugin-version-bump.sh`) are wired `pull_request`-only in `validate.yml`, so they run in CI
-on NO path. `.githooks/pre-push` is the only thing enforcing them, which
+The second is now FIXED (#158, 2026-09-08). Both range guards were wired `pull_request`-only, so
+they ran in CI on no path; they now run on `push` too, with the base resolved by
+`scripts/resolve-range-base.sh` rather than by a YAML expression, because `github.event.before` is
+all-zeroes on a created ref and may be unreachable after a force push. `.githooks/pre-push` is the only thing enforcing them, which
 makes `git config core.hooksPath .githooks` a requirement and `--no-verify` a decision rather than
 a shortcut. Issue #158 tracks restoring the server-side half. Until it lands, never assume a
 version bump was checked by anything except the local hook.
