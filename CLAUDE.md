@@ -42,6 +42,9 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
    bash scripts/test-component-size.sh          # contract test for the size budget guard
    bash scripts/check-component-size.sh        # warn above the word budget, fail above the ceiling
    bash scripts/test-pre-push-hook.sh          # contract test for the local pre-push range guard
+   bash scripts/test-pre-commit-hook.sh        # contract test for the local pre-commit hook, leak scan included
+   bash scripts/test-check-public-leaks.sh     # contract test for the leak guard's public half
+   bash scripts/test-check-private-leaks.sh    # contract test for the leak guard's identity half
    bash scripts/test-component-paths.sh        # fail if the four path-set consumers disagree
    bash scripts/test-version-lib.sh            # contract test for the release version<->tag primitive
    bash scripts/test-release-run.sh            # contract test for the release lane policy (DRY_RUN)
@@ -118,7 +121,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-devops` | 0.9.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.9.5 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-security` | 0.7.0 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
+| `forge-kit-security` | 0.7.1 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
 | `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
 
