@@ -268,11 +268,17 @@ The supported split is the `skills:` frontmatter field, which injects a named sk
 
 ## Workflow
 
-Changes land through a branch and a PR, never a direct push to main. Both range guards
-(`check-version-bump.sh`, `check-plugin-version-bump.sh`) run only on `pull_request`, so a direct
-push to main is gated by nothing except the local pre-commit hook.
+**Work happens on `develop` and is merged to `main` when green. No pull requests**
+(maintainer decision, 2026-09-08). Commit and merge without waiting to be asked.
 
-1. Branch as `feat/<issue-number>-<slug>` or `fix/<slug>`.
+**The consequence, and it is not small.** Both range guards (`check-version-bump.sh`,
+`check-plugin-version-bump.sh`) are wired `pull_request`-only, so under this workflow **they never
+run in CI at all**. `.githooks/pre-push` is now the ONLY thing enforcing them, which makes
+`git config core.hooksPath .githooks` a requirement rather than a convenience, and
+`git push --no-verify` a decision rather than a shortcut. Issue #158 tracks restoring the
+server-side half by running them on `push` as well.
+
+1. Branch from `develop` only if the work needs isolation; otherwise commit to `develop` directly.
 2. Commit with a conventional-commit subject (`feat(...)`, `fix(review)`, `docs(...)`, `chore(...)`),
    bumping the `<name>-version` marker of every component the commit touches, plus the `plugin.json`
    semver of every plugin group it touches.
@@ -280,11 +286,13 @@ push to main is gated by nothing except the local pre-commit hook.
 4. Push the branch and open a PR into main.
 
 ```bash
-git checkout -b feat/<N>-<slug>
+git checkout develop
 git add <changed files>
 git commit -m "feat(<scope>): <concise message>"
-git push -u origin HEAD
-gh pr create --fill
+git push origin develop          # pre-push runs the range guards and the leak guard
+git checkout main && git merge --ff-only develop && git push origin main
 ```
 
-Do this at the end of every task without waiting to be asked.
+Do this at the end of every task without waiting to be asked. Watch the `Validate` run on main
+(`gh run watch`) rather than assuming it passed: on this path there is no PR check to block a bad
+merge, so the run is a report after the fact.
