@@ -125,7 +125,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-devops` | 0.10.1 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.9.5 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-roadmap` | 0.4.0 | command: phase; skill: roadmap-phases; shell assets: check-phases, sync-phases |
+| `forge-kit-roadmap` | 0.5.0 | command: phase; skill: roadmap-phases; shell assets: check-phases, sync-phases |
 | `forge-kit-security` | 0.7.1 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
 | `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
@@ -297,6 +297,14 @@ The supported split is the `skills:` frontmatter field, which injects a named sk
 **`.superpowers/sdd/`** is the superpowers spec-driven-development runtime store (task briefs, per-task reports, progress files, review diffs). It carries its own `.gitignore` containing `*`, so it self-ignores and never appears in `git status`; do not add it to the root `.gitignore` and do not cite its contents as tracked history. The durable counterpart is `docs/superpowers/`, which **is** tracked.
 
 **`temp/`** is a gitignored scratch folder (`temp/*` ignored, `.gitkeep` tracked). Use it for throwaway analysis output. Anything there is untracked by design, so never cite it as a source of truth or assume a later session can see it.
+
+**`docs/roadmap.md`** is forge-kit's own roadmap, and the repo is the first project to install
+`forge-kit-roadmap`. It owns which phases exist and their state; the host's milestones own which
+phase each ticket is in. Never record phase membership in the roadmap: that is the duplication the
+design exists to avoid. `docs/plans/<phase>.md` holds the plan for a phase, written when it opens
+and never before, and every plan carries a **Fails if** section written as a premortem. The
+`.githooks/pre-push` hook runs the guard's OFFLINE half only, because a push must not depend on the
+host being reachable; the three host rules run in CI and from `/phase`.
 
 **`.claude/memory/MEMORY.md`** is the tracked, team-visible project memory index. Durable decisions and in-flight context belong there, one line per entry pointing at a sibling file. **`.claude/handoffs/`** holds dated session-resume notes written by the `closing-sessions` skill; both stores are what that skill targets when a session wraps up.
 
