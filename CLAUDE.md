@@ -16,7 +16,7 @@ install time.
 A root `AGENTS.md` exists as a thin pointer to this file for non-Claude agents (the open
 cross-agent instruction format); keep it a pointer, never duplicate content into it.
 
-**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, twenty contract test suites, the component-index freshness check, the component size budget, and (on `pull_request` only) the two range guards, plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Twelve of those twenty suites cover shipped executables (hooks, the catalogue script, the agent-skills script, `forge-lib.sh`, the component-index generator, both leak scanners); the other eight cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`, `test-component-size.sh`, `test-pre-push-hook.sh`, `test-component-paths.sh`, `test-check-restatements.sh`, `test-producer-stamps.sh`, `test-template-dir-order.sh`), and all of those run unconditionally even though one of the guards they cover is PR-only.
+**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, twenty-one contract test suites, the component-index freshness check, the component size budget, and (on `pull_request` only) the two range guards, plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Twelve of those twenty-one suites cover shipped executables (hooks, the catalogue script, the agent-skills script, `forge-lib.sh`, the component-index generator, both leak scanners); the other nine cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`, `test-component-size.sh`, `test-pre-push-hook.sh`, `test-pre-commit-hook.sh`, `test-component-paths.sh`, `test-check-restatements.sh`, `test-producer-stamps.sh`, `test-template-dir-order.sh`), and all of those run unconditionally even though one of the guards they cover is PR-only.
 
 **Validation approach:** There is no application test runner. Two kinds of validation exist:
 
@@ -74,7 +74,7 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
 
    - **`forge-host/assets/sync-labels.sh`** (`scripts/test-sync-labels.sh`, 22 tests, in CI): makes the host's labels match `.github/labels.yml`, or `--check` reports that they do not. Host-aware through `forge-lib.sh` (GitHub updates a label by NAME, Forgejo by ID) and **never deletes**: an undeclared label is reported and left alone, because GitHub ships stock defaults and a sync that deletes what it does not recognise is a footgun aimed at other people's data. A malformed `labels.yml` line REFUSES the whole run rather than skipping the entry, since a silent partial sync is the drift it exists to end. Driven in tests by a stub `forge-lib.sh` placed beside a copy of the script, so the script sources the stub instead of the transport.
 
-   - **`leak-guard/assets/check-public-leaks.sh`** (`scripts/test-check-public-leaks.sh`, 69 tests,
+   - **`leak-guard/assets/check-public-leaks.sh`** (`scripts/test-check-public-leaks.sh`, 72 tests,
      in CI): the PUBLIC half of the leak guard (#99, split as #155). Catches home-path shapes,
      unlisted `~/` roots and reachable email addresses, and forge-kit runs it on its own tree the
      way it runs `block-dashes` on itself. Every rule has a NEAR-MISS case as well as a firing one,
@@ -84,9 +84,11 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
      name** and a guard that overstates its reach is worse than a narrow one that admits it. Both
      scanners were the first files here to want bash-4 expansions and GNU `readlink -f`; the suite
      BANS them, because macOS ships bash 3.2 and a component that dies on a contributor's laptop
-     gets deleted rather than reported.
+     gets deleted rather than reported. Both rules judge the FIRST path segment only, so a private
+     directory name under an allowed root is invisible to the public half; the source says so,
+     because the first version of its reach statement did not and a review found the gap.
 
-   - **`leak-guard/assets/check-private-leaks.sh`** (`scripts/test-check-private-leaks.sh`, 39
+   - **`leak-guard/assets/check-private-leaks.sh`** (`scripts/test-check-private-leaks.sh`, 40
      tests, in CI): the IDENTITY half of the leak guard (#156). It is the one shipped executable
      that is contract-tested in CI but never RUN there, and that is permanent: it needs the list of
      private names, and a list of the names you are hiding cannot live in the repository it
@@ -116,7 +118,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-devops` | 0.9.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.9.5 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-security` | 0.6.2 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
+| `forge-kit-security` | 0.7.0 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
 | `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
 
@@ -187,6 +189,15 @@ The root `.claude-plugin/marketplace.json` lists all plugins with their local `s
 **forge-adapt flow (v2, recommender-style):** A quiet **Setup** (silent self-update via SHA-diff against the GitHub remote, locate/clone `~/forge-kit`, catalogue components) precedes a clean three-step dialogue: **Analyze** the project (stack, domain, installed components, signal indicators) → **Recommend** the top 1-2 forge-kit components per category (Subagents, Skills, Commands, Hooks), each with a ≤60-char reason → **Install** the chosen ones, adapting agents/skills/commands to the stack and copying hooks verbatim (wiring `block-dashes` into `.claude/settings.json`). Three **secondary modes** stay out of the main flow: `refresh`/`drift` reports which installed components lag forge-kit (version-marker comparison, writes nothing) and `refresh <name>` deep-compares one component and merges in missing forge-kit improvements while preserving project adaptation (report-first, never blind-overwrite); `forge-adapt contributions` surfaces project-only components worth contributing back; `forge-adapt templates` audits issue templates and can install the repo-level template governance (the `check-template-lockstep.sh` guard plus a canonical, host-aware `docs/guides/ticket-standards.md`, adapted with the project's own `template-version` and never clobbering an existing doc). Also responds to "upgrade-audit" for backward compatibility.
 
 **Component version markers:** every agent, skill, and command carries an HTML-comment marker (`<!-- <name>-version: N -->`, e.g. `<!-- ticket-gate-version: 1 -->`); hooks and shipped shell assets (`plugins/*/skills/*/assets/*.sh`) use a `# <name>-version: N` comment. These are the cheap, false-positive-free drift signal forge-adapt's `drift`/`refresh` modes compare against (adaptation does not change the marker; staleness does). This is distinct from the `template-version: N` marker on issue templates. When you materially change a component's behavior, bump its marker. `forge-adapt` preserves the marker when it adapts a component into a project, so a project's installed copy stays detectable.
+
+**The leak guard runs FIRST in both hooks, before every early exit.** It was wired in at the
+bottom of each, so `pre-commit` skipped it for any commit not touching `plugins/` (which is most
+prose, and prose is where a pasted home path lands) and `pre-push` skipped it whenever
+`origin/main` was not fetched. Both hooks now scan before their own machinery, keep a separate
+counter from it, and distinguish a scanner exit 1 (found something) from exit 2 (could not run):
+both block, but telling someone to edit an allow-file they have just broken sends them the wrong
+way. `scripts/test-pre-commit-hook.sh` exists because of this: the pre-push hook has had a
+contract test since #98 and the pre-commit hook had none.
 
 **Version-bump enforcement, split across two local stages.** `.githooks/pre-commit` checks the STAGED set: it blocks a commit that changes a component's body without bumping its `<name>-version` marker (and flags new components missing a marker), and a commit that changes a plugin group without strictly increasing its `plugin.json` semver (one shared implementation: the hook calls `check-plugin-version-bump.sh --staged`). `.githooks/pre-push` then runs the RANGE guards (`check-version-bump.sh` and `check-plugin-version-bump.sh` against the remote's default branch), which is the question CI asks on a PR and the one that only has an answer once you know what you are pushing. That stage matters most on the path CI never sees: both range guards are `pull_request`-only, so a **direct push to main is gated by pre-push alone**. Skips are always loud, never silent, and never block the push: a missing base ref or a missing `jq` prints why and defers to CI, the same posture pre-commit already takes for `jq`. Deliberately two committed hooks rather than adopting the `pre-commit` framework, which would give a one-command install and be the first package-manager dependency in a repo that has none. One-time enablement covers both: `git config core.hooksPath .githooks`. Bypass a trivial change with `git commit --no-verify` or `git push --no-verify`.
 
@@ -273,17 +284,21 @@ The supported split is the `skills:` frontmatter field, which injects a named sk
 
 **The consequence, and it is not small.** Both range guards (`check-version-bump.sh`,
 `check-plugin-version-bump.sh`) are wired `pull_request`-only, so under this workflow **they never
-run in CI at all**. `.githooks/pre-push` is now the ONLY thing enforcing them, which makes
+run in CI at all**. `.githooks/pre-push` is the ONLY thing enforcing them, which makes
 `git config core.hooksPath .githooks` a requirement rather than a convenience, and
 `git push --no-verify` a decision rather than a shortcut. Issue #158 tracks restoring the
-server-side half by running them on `push` as well.
+server-side half, which needs a base-ref decision rather than a branch name.
+
+`validate.yml` now also triggers on `push` to `develop`. It did not at first, and the effect was
+worse than the range-guard gap: with `pull_request` never firing and `push` matching only `main`,
+**no CI ran on develop at all** and every check ran for the first time after the merge.
 
 1. Branch from `develop` only if the work needs isolation; otherwise commit to `develop` directly.
 2. Commit with a conventional-commit subject (`feat(...)`, `fix(review)`, `docs(...)`, `chore(...)`),
    bumping the `<name>-version` marker of every component the commit touches, plus the `plugin.json`
    semver of every plugin group it touches.
 3. Run the structural and contract checks above.
-4. Push the branch and open a PR into main.
+4. Push `develop`, watch its `Validate` run, then fast-forward `main` onto it and push.
 
 ```bash
 git checkout develop
