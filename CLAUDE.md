@@ -16,7 +16,7 @@ install time.
 A root `AGENTS.md` exists as a thin pointer to this file for non-Claude agents (the open
 cross-agent instruction format); keep it a pointer, never duplicate content into it.
 
-**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, nineteen contract test suites, the component-index freshness check, the component size budget, and (on `pull_request` only) the two range guards, plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Eleven of those nineteen suites cover shipped executables (hooks, the catalogue script, the agent-skills script, `forge-lib.sh`, the component-index generator, the leak scanner); the other eight cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`, `test-component-size.sh`, `test-pre-push-hook.sh`, `test-component-paths.sh`, `test-check-restatements.sh`, `test-producer-stamps.sh`, `test-template-dir-order.sh`), and all of those run unconditionally even though one of the guards they cover is PR-only.
+**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, twenty contract test suites, the component-index freshness check, the component size budget, and (on `pull_request` only) the two range guards, plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Twelve of those twenty suites cover shipped executables (hooks, the catalogue script, the agent-skills script, `forge-lib.sh`, the component-index generator, both leak scanners); the other eight cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`, `test-component-size.sh`, `test-pre-push-hook.sh`, `test-component-paths.sh`, `test-check-restatements.sh`, `test-producer-stamps.sh`, `test-template-dir-order.sh`), and all of those run unconditionally even though one of the guards they cover is PR-only.
 
 **Validation approach:** There is no application test runner. Two kinds of validation exist:
 
@@ -58,7 +58,7 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
 
    No test script takes a filter argument, so one script is the smallest unit you can run; there is no per-case selector to reach for. The only finer entry point is `python3 plugins/forge-kit-devops/hooks/block-legacy-host-push.py --self-test`, that hook's own verdict matrix, which `test-hooks.py` also drives.
 
-2. **Behavioural validation:** agents, skills, and commands are prose, cannot be run in isolation here, and must be installed into a test project via `forge-adapt` and exercised there. **The exception is anything the kit ships as an executable**, which has a real contract and therefore a real test. Eleven exist today, and all eleven run in CI, each exercised as a subprocess (throwaway directories, this repo itself, or a stubbed transport, per bullet):
+2. **Behavioural validation:** agents, skills, and commands are prose, cannot be run in isolation here, and must be installed into a test project via `forge-adapt` and exercised there. **The exception is anything the kit ships as an executable**, which has a real contract and therefore a real test. Twelve exist today, and all twelve are contract-tested in CI, each exercised as a subprocess (throwaway directories, this repo itself, or a stubbed transport, per bullet):
 
    - **Hooks** (`scripts/test-hooks.py`): JSON payload on stdin, a `permissionDecision` on stdout, always exit 0. The test covers every matched tool, fail-open on unparseable input, deny-signalled-on-stdout-not-exit-code, and a regression guard for the foreign-cwd wiring bugs. It runs in CI. When you change a hook, extend it: three consecutive PRs shipped hook defects before this existed.
    - **`closing-sessions/scripts/memory.py`** (`scripts/test-closing-sessions-memory.py`, 12 tests): the one skill that ships an executable rather than only prose, so the `forge-kit-governance` plugin has a second testable surface. Its own history is the argument for the test (`anchor index matching and escape memory fields`, `treat index-line replacement as literal, not regex`). Wired into CI as of #76; it previously existed but ran only by hand. It still carries **no** `<name>-version: N` marker, because `memory.py` lives in a `scripts/` subdirectory and no marker guard globs that (see the enforced path set below), so a change to it is caught by the test but produces no drift signal for `forge-adapt`.
@@ -83,7 +83,19 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
      limits are stated in its own source, since **nothing in the public half catches a bare project
      name** and a guard that overstates its reach is worse than a narrow one that admits it.
 
-   **Every shipped executable now has a contract test, and all of them run in CI** (issue #76 closed the last gap, and #155 kept the invariant when it added the sixth shell asset). All six shell assets carry hook-style `# <name>-version: N` markers, enforced by the same enforcement points as every other component.
+   - **`leak-guard/assets/check-private-leaks.sh`** (`scripts/test-check-private-leaks.sh`, 31
+     tests, in CI): the IDENTITY half of the leak guard (#156). It is the one shipped executable
+     that is contract-tested in CI but never RUN there, and that is permanent: it needs the list of
+     private names, and a list of the names you are hiding cannot live in the repository it
+     protects, nor in a CI secret, which is the same disclosure with more readers. Three of its
+     behaviours look like leniency and are the opposite, because all three failures point at the
+     guard being UNINSTALLED: a missing list exits 0 and says so, the OWNING ACCOUNT's name is
+     dropped with a warning (it is in the clone URL, so obeying it refuses every commit touching
+     the README), and an entry under three characters refuses the run. It also REDACTS the matched
+     name by default, because a failing hook's output is exactly the pasted text this component
+     exists to police.
+
+   **Every shipped executable now has a contract test, and all of them run in CI** (issue #76 closed the last gap, and #155/#156 kept the invariant when they added the sixth and seventh shell assets). All seven shell assets carry hook-style `# <name>-version: N` markers, enforced by the same enforcement points as every other component.
 
 ## Architecture
 
@@ -101,7 +113,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-devops` | 0.9.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.9.5 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-security` | 0.4.0 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell asset: check-public-leaks |
+| `forge-kit-security` | 0.5.0 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
 | `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
 
