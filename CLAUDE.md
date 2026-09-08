@@ -74,16 +74,19 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
 
    - **`forge-host/assets/sync-labels.sh`** (`scripts/test-sync-labels.sh`, 22 tests, in CI): makes the host's labels match `.github/labels.yml`, or `--check` reports that they do not. Host-aware through `forge-lib.sh` (GitHub updates a label by NAME, Forgejo by ID) and **never deletes**: an undeclared label is reported and left alone, because GitHub ships stock defaults and a sync that deletes what it does not recognise is a footgun aimed at other people's data. A malformed `labels.yml` line REFUSES the whole run rather than skipping the entry, since a silent partial sync is the drift it exists to end. Driven in tests by a stub `forge-lib.sh` placed beside a copy of the script, so the script sources the stub instead of the transport.
 
-   - **`leak-guard/assets/check-public-leaks.sh`** (`scripts/test-check-public-leaks.sh`, 58 tests,
+   - **`leak-guard/assets/check-public-leaks.sh`** (`scripts/test-check-public-leaks.sh`, 69 tests,
      in CI): the PUBLIC half of the leak guard (#99, split as #155). Catches home-path shapes,
      unlisted `~/` roots and reachable email addresses, and forge-kit runs it on its own tree the
      way it runs `block-dashes` on itself. Every rule has a NEAR-MISS case as well as a firing one,
      because a shape rule fails by being too eager: a guard that rejects `/home/user/` is a guard
      nobody can write install docs under, and the first response to that is to delete it. Its
      limits are stated in its own source, since **nothing in the public half catches a bare project
-     name** and a guard that overstates its reach is worse than a narrow one that admits it.
+     name** and a guard that overstates its reach is worse than a narrow one that admits it. Both
+     scanners were the first files here to want bash-4 expansions and GNU `readlink -f`; the suite
+     BANS them, because macOS ships bash 3.2 and a component that dies on a contributor's laptop
+     gets deleted rather than reported.
 
-   - **`leak-guard/assets/check-private-leaks.sh`** (`scripts/test-check-private-leaks.sh`, 38
+   - **`leak-guard/assets/check-private-leaks.sh`** (`scripts/test-check-private-leaks.sh`, 39
      tests, in CI): the IDENTITY half of the leak guard (#156). It is the one shipped executable
      that is contract-tested in CI but never RUN there, and that is permanent: it needs the list of
      private names, and a list of the names you are hiding cannot live in the repository it
@@ -113,7 +116,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-devops` | 0.9.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.9.5 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-security` | 0.6.0 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
+| `forge-kit-security` | 0.6.2 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
 | `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
 
