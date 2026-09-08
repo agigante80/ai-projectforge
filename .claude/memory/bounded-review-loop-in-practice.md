@@ -1,6 +1,6 @@
 ---
 name: bounded-review-loop-in-practice
-description: Fired 6 times, and once stopped preemptively on the findings' shape; close out by fixing merge-blockers only and ticketing the rest, say so in the commit, verify the reviewer's claims, unify a rule found in three faces, and enumerate the domain when a round falsifies a universal claim
+description: Fired 6 times plus a preemptive stop; on prose the loop injects defects and on code it converges, so ask whether a TEST can hold the fix down
 metadata:
   type: feedback
 ---
@@ -83,5 +83,31 @@ unexecutable instruction reads as covered: Step 1.5 re-triggering on a body that
 prior body persisted anywhere, and Step 4 marking report sections "carried forward" when the prior
 review lives in a comment nothing can read. Deleting the second paid for the entire round. An
 instruction that cannot run is worse than an absent one, because absence gets noticed.
+
+**Seventh and eighth firings, 2026-09-07** (PRs #152 and #153, the Step 3A script), and together
+they draw the line this note was missing: **the loop behaves differently on prose than on code,
+and the trip wire should be read differently in each case.**
+
+On PROSE the loop injects. PR #146 stopped at round 2 with nine of eleven findings being "this new
+clause contradicts an older clause it did not update", and each round's fix created the next
+round's defect. On CODE it converges. PR #152 ran three rounds on a new shell asset, each found
+real fail-opens, and each fix is now pinned by a mutant-killed test, so the same defect cannot
+return. Same loop, opposite verdicts. The distinguishing question is whether a TEST can hold the
+fix down: if it can, keep going; if the only thing holding it is prose, stop and ticket.
+
+That instance also produced the strongest single diagnostic yet, and it is about claims rather than
+code: **a universal claim asserted without enumerating what it quantifies over will be false, and
+the repair will be false the same way.** "This step is the body's only writer" was wrong; the fix
+that named the one other writer the review had supplied was wrong again; a third writer existed.
+"No write touches author text" was wrong in a new place. The repair that held was to COUNT, not to
+subtract the counterexample handed to you.
+
+Two more from the same pair of PRs. **Delete rules that cannot execute rather than patching them**:
+an instruction referring to state nothing persists reads as covered rather than missing, so it
+survives review after review (a thin-check comparing against a body no one stores, a carry-forward
+rule needing a comment nothing can read). Deleting one paid for an entire round under the size
+ratchet. And **a fixture written by a copy of the parser it tests agrees with the parser's bugs**:
+the independent oracle that replaced it disagreed on its first run, and the parser was right, which
+is the oracle doing its job in the direction nobody expects.
 
 **How to apply:** when a round's findings are mostly "this new clause contradicts an older clause it did not update", stop and ticket. That signal usually means the component is too large ([[generated-index-and-size-budget]] tracks the size half of this problem), not that the reviewer is being picky.

@@ -1,6 +1,6 @@
 ---
 name: generated-index-and-size-budget
-description: "Four hand-maintained inventories and 5-7k-word components are the root cause behind repeated review findings; #95 then #96 then #97"
+description: "Both #96 and #97 shipped; the ratchet paid for seven fixes then exhausted, so #150 needs a capability or policy decision, not more compression"
 metadata:
   type: project
 ---
@@ -36,3 +36,24 @@ instruction someone runs once. Labels created and #104 filed for the missing syn
 suspect until something applies it: labels today, the component inventory in #96, the same shape.
 
 CLAUDE.md is itself a hand-maintained inventory, and it is 4,433 words, so it is an instance of **both** weaknesses at once. Treat a periodic `/init` accuracy pass as maintenance to schedule, not as evidence that the last pass was careless. The prose parts (hook shapes, enforcement reasoning) drift as readily as the tables, so a generated index would fix only half of it.
+
+## Outcome, 2026-09-07: both landed, and the budget half has now hit its floor
+
+#96 and #97 both shipped. The generated index removed the four-inventory drift class outright.
+The budget's ratchet worked exactly as intended for seven consecutive fixes to `ticket-gate.md`,
+each paying its own way out of duplication the work exposed (PASS defined twice, a thin check
+stating its purpose three times, one rationale across two steps, the same `gh issue edit` snippet
+in three places, an unexecutable carry-forward rule). That took it 5486 to 5209 while ADDING
+behaviour, which is the strongest evidence the diagnosis above was right: the size WAS the
+duplication.
+
+Then it ran out. An eighth fix found no duplication left (a seven-word-shingle scan returns only
+one symmetric table and one required restatement), and the baseline was raised once, 5209 to 5265,
+by maintainer decision rather than by an agent's initiative. That is the only raise in the numbers'
+history and it is recorded in both `check-component-size.sh` and CLAUDE.md.
+
+**What this changes:** the payment technique is exhausted for this component, so #150 (successor to
+the closed #109) now needs a capability decision or a policy change, not more compression.
+Scripting prose is the one lever that worked without cost: #149 turned Step 3A's 544 words into a
+68-test executable and made the removed part more trustworthy, not less. See
+[[shipped-asset-path-resolution]] for the trap that shipping such an asset opens.
