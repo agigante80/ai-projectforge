@@ -23,7 +23,8 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
 1. **Structural / discipline checks** (the same gates CI runs; run these before committing):
 
    ```bash
-   bash scripts/validate-plugins.sh            # plugin.json + marketplace.json + version markers (whole tree)
+   bash scripts/validate-plugins.sh            # plugin.json + marketplace.json + version markers + declared dependencies (whole tree)
+   bash scripts/test-validate-plugins.sh       # contract test for the structural gate above
    bash scripts/check-template-lockstep.sh     # fail if the work templates + canonical ticket-standards doc drift out of version lockstep
    python3 scripts/test-hooks.py               # behavioural contract tests for the hooks
    bash scripts/test-template-lockstep.sh      # contract test for the lockstep guard above
@@ -131,9 +132,9 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-adapt` | 0.6.1 | skill: adapt |
 | `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
 | `forge-kit-devops` | 0.10.6 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
-| `forge-kit-governance` | 0.11.1 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, decision-brief, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
+| `forge-kit-governance` | 0.12.0 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, decision-brief, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-roadmap` | 0.7.0 | command: phase; skill: roadmap-phases; shell assets: check-phases, roadmap-lib, sync-phases |
+| `forge-kit-roadmap` | 0.8.0 | command: phase; skill: roadmap-phases; shell assets: check-phases, roadmap-lib, sync-phases |
 | `forge-kit-security` | 0.7.3 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
 | `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
@@ -185,6 +186,8 @@ Each plugin group has a `.claude-plugin/plugin.json` with `name`, `description`,
 ```
 
 The root `.claude-plugin/marketplace.json` lists all plugins with their local `source` paths. This is the file the plugin marketplace reads to discover installable plugins.
+
+**A cross-group dependency is declared in BOTH places, and each place serves a different install path (#169).** `plugin.json` takes a `dependencies` array of `plugin@marketplace` identifiers and the installer resolves it: probed against 2.1.267, installing `forge-kit-roadmap` alone prints `+ 1 dependency: forge-kit-devops` and enables both. Exactly two groups declare one, and no others should: `forge-kit-roadmap` and `forge-kit-governance` both need `forge-lib.sh` from `forge-kit-devops`. The manifest is for the marketplace path; the prose in `roadmap-phases/SKILL.md` and `decision-brief/SKILL.md` is for the bare-clone path, where nothing resolves anything and the runtime message from #161 is the only thing a user gets. Neither replaces the other, so a new dependency goes in both. `scripts/validate-plugins.sh` then checks the half the CLI does not: an unresolvable identifier passes `claude plugin validate` and INSTALLS SILENTLY, with no dependency line and no error, so the guard fails a declared dependency `marketplace.json` does not list. One named in a foreign marketplace is reported rather than failed, since this tree cannot resolve it.
 
 **Three versioning levels (don't conflate them):** the **release tag** (`vX.Y.Z` on main) is the umbrella version naming the state of the whole marketplace at a point in time. It is a communication artifact, not a delivery mechanism: `/plugin marketplace add` tracks the repository, so a tag never changes what an existing user receives. The tag itself is the canonical source, and there is deliberately no `VERSION` file and no `version` field in `marketplace.json`, because a repo-level version file would be a mirror with nothing to check it against and no guard watching it. Nothing enforces the tag, and nothing needs to; there is only one place to be wrong. The **plugin** version (`version` in `plugin.json`, semver) is the standard unit-of-install version read by the marketplace/tooling, set per plugin group. The **component** version (`<!-- <name>-version: N -->` markers) is forge-kit's finer-grained signal for detecting drift in a single component that `forge-adapt` cherry-picked and rewrote into a project's `.claude/`. Divorced from its plugin, a loose adapted file needs its own marker. The `Validate` CI workflow enforces both: `scripts/validate-plugins.sh` checks structure + semver + marker presence; `scripts/check-version-bump.sh` fails a PR whose component changed without a marker bump (the authoritative, server-side counterpart to the opt-in `.githooks/pre-commit`); `scripts/check-plugin-version-bump.sh` fails a PR whose plugin GROUP changed without a `plugin.json` semver bump, so the unit-of-install version can no longer rot while markers move (it did exactly that in PRs #74/#75, which is why the guard exists). Cutting a release does **not** touch plugin semvers: those move on the PR that changes their group, which is the only moment a guard can see it. The full model, including when to bump the umbrella and why `template-version` is not one of these levels, is `docs/guides/versioning.md`; `CHANGELOG.md` carries the umbrella history.
 
