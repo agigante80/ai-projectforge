@@ -64,7 +64,7 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
    bash scripts/test-version-lib.sh            # contract test for the release version<->tag primitive
    bash scripts/test-release-run.sh            # contract test for the release lane policy (DRY_RUN)
    bash scripts/test-sync-labels.sh            # contract test for the host-aware label sync
-   python3 scripts/test-closing-sessions-memory.py  # contract test for the closing-sessions memory.py helper (NOT yet wired into CI)
+   python3 scripts/test-closing-sessions-memory.py  # contract test for the closing-sessions memory.py helper
    git fetch origin main                       # required: the next script fails closed on a missing base ref
    bash scripts/check-version-bump.sh origin/main   # fail if a changed component didn't bump its <name>-version marker
    bash scripts/test-check-plugin-version-bump.sh   # contract test for the plugin-semver guard below
