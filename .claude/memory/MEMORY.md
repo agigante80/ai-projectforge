@@ -11,3 +11,4 @@
 - [Mutation harness quoting](mutation-harness-quoting.md) - apply shell mutants with python + an assert; a mutant that fails to apply reads exactly like one that survived
 - [Shipped assets resolve by search, not by CLAUDE_PLUGIN_ROOT](shipped-asset-path-resolution.md) - An agent's Bash never gets CLAUDE_PLUGIN_ROOT; a missing asset degrades silently, and forge-adapt copies assets only because the write step says so
 - [Work on develop, merge to main, no PRs](develop-branch-workflow.md) - maintainer decision 2026-09-08; the range guards are pull_request-only so pre-push is now the only enforcement (#158)
+- [Component size is what an agent PRELOADS](component-size-is-what-preloads.md) - skills: frontmatter injects full bodies; references/ do not; the metric was wrong until #150
