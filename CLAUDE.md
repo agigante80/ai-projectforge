@@ -193,7 +193,7 @@ The root `.claude-plugin/marketplace.json` lists all plugins with their local `s
 - Skills → injected knowledge, patterns, checklists; no isolation
 - Commands → user-facing entry points; delegate to agents
 
-**`{{GITHUB_REPO}}` is retired from every component (#163).** It survives only in prose documenting the manual-install path, where naming it is correct. No component substitutes anything at install time any more: `forge_repo` derives `owner/repo` from the git remote at runtime, which is what lets a component be installed once rather than copied into each project. `scripts/check-live-placeholders.sh` refuses a new one.
+**`{{GITHUB_REPO}}` is retired from every component (#163).** It survives only in prose documenting the manual-install path, where naming it is correct. No component substitutes anything at install time any more: `forge_repo` derives `owner/repo` from the git remote at runtime, which is what lets a component be installed once rather than copied into each project. `scripts/check-live-placeholders.sh` refuses a new one in any component, whatever its scope.
 
 **Installation paths:**
 - Plugin marketplace: `/plugin marketplace add agigante80/forge-kit` then `/plugin install forge-kit-adapt@forge-kit`, after which forge-adapt installs everything else. The skill's frontmatter `name` is `forge-adapt`, but its directory is `skills/adapt/`, so the slash form is `/forge-kit-adapt:adapt` (not `/forge-adapt`); in conversation, "run forge-adapt" also triggers it.
@@ -245,8 +245,8 @@ every project is the cost that field buys. The default is `user` deliberately: a
 point at the good path, and after #163 that is the case the tree can prove. All thirty-eight
 components are user-scoped today. `scripts/check-component-scope.sh` reads FRONTMATTER only (a
 `scope:` in the body is an example, and reading it would let a component be scoped by its own
-documentation) and refuses a user-scoped component carrying an install-time placeholder, which is
-the one contradiction a script can see.
+documentation) and refuses ANY component carrying an install-time placeholder, which is the one
+contradiction a script can see.
 
 **A component resolves its values at RUNTIME, never at install time (#163).** A component that
 reads the project it is running in is correct in every project and can be installed once, by
@@ -254,9 +254,13 @@ enabling its plugin group; one with a value baked in by `forge-adapt` is pinned 
 forces a copy, which is the copy-and-mutate path this file already calls the origin of every hook
 bug in the repo's history. `scripts/check-live-placeholders.sh` refuses a `{{PLACEHOLDER}}` inside
 a fenced command while ALLOWING one in prose, because the manual-install path has to stay
-documentable and a guard forbidding the explanation would forbid the reason. The single exemption
-is a line containing `sed`, the substitution command itself. An unclosed code fence refuses the
-file rather than guessing, since it cannot then tell command from prose.
+documentable and a guard forbidding the explanation would forbid the reason. The single exemption is a
+line whose command IS `sed`, word-anchored, because an unanchored match exempted any line
+containing "used", "based", "parsed" or "closed" (found by review). **No scope exempts a
+component:** round 1 of that review allowed one under `scope: project`, and round 2 found nothing
+substitutes a placeholder since #163, so the licence would have installed a broken component. An
+unclosed code fence refuses the file rather than guessing, since it cannot then tell command from
+prose.
 
 **The leak guard runs FIRST in both hooks, before every early exit.** It was wired in at the
 bottom of each, so `pre-commit` skipped it for any commit not touching `plugins/` (which is most
