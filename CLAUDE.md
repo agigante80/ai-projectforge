@@ -16,7 +16,7 @@ install time.
 A root `AGENTS.md` exists as a thin pointer to this file for non-Claude agents (the open
 cross-agent instruction format); keep it a pointer, never duplicate content into it.
 
-**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, twenty-six contract test suites, the component-index freshness check, the component size budget, the two range guards (on `pull_request` AND `push`, #158), plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Fourteen of those twenty-six suites cover shipped executables (hooks, the catalogue script, the agent-skills script, `forge-lib.sh`, the component-index generator, both leak scanners, and the two roadmap assets); the other twelve cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`, `test-component-size.sh`, `test-pre-push-hook.sh`, `test-pre-commit-hook.sh`, `test-component-paths.sh`, `test-check-restatements.sh`, `test-producer-stamps.sh`, `test-template-dir-order.sh`, `test-check-group-isolation.sh`, `test-resolve-range-base.sh`, `test-check-live-placeholders.sh`), and all of them run unconditionally.
+**forge-kit** is an AI-assisted project governance scaffold: AI-agnostic at the governance layer (issue templates, labels, GWT scenarios), Claude Code-native at the automation layer (agents, skills, slash commands). It is a template repository, not a buildable application. Its purpose is to be bootstrapped into other projects or used as an upgrade reference via the `forge-adapt` skill. There are no build steps or package managers. The only CI is a governance `Validate` workflow (`.github/workflows/validate.yml`): it runs the structural check, the template lockstep, twenty-seven contract test suites, the component-index freshness check, the component size budget, the two range guards (on `pull_request` AND `push`, #158), plus one advisory `claude plugin validate` step marked `continue-on-error` that can report issues without failing the build. There is no application build/test pipeline. Fourteen of those twenty-seven suites cover shipped executables (hooks, the catalogue script, the agent-skills script, `forge-lib.sh`, the component-index generator, both leak scanners, and the two roadmap assets); the other thirteen cover the repo's own guards (`test-template-lockstep.sh`, `test-check-plugin-version-bump.sh`, `test-component-size.sh`, `test-pre-push-hook.sh`, `test-pre-commit-hook.sh`, `test-component-paths.sh`, `test-check-restatements.sh`, `test-producer-stamps.sh`, `test-template-dir-order.sh`, `test-check-group-isolation.sh`, `test-resolve-range-base.sh`, `test-check-live-placeholders.sh`, `test-check-component-scope.sh`), and all of them run unconditionally.
 
 **Validation approach:** There is no application test runner. Two kinds of validation exist:
 
@@ -51,6 +51,8 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
    bash scripts/check-group-isolation.sh       # fail if anything outside forge-kit-roadmap references it
    bash scripts/test-check-live-placeholders.sh # contract test for the placeholder guard below
    bash scripts/check-live-placeholders.sh     # fail if a component bakes a value in at install time
+   bash scripts/test-check-component-scope.sh  # contract test for the scope guard below
+   bash scripts/check-component-scope.sh       # fail if a component's declared scope contradicts the tree
    bash scripts/test-component-paths.sh        # fail if the four path-set consumers disagree
    bash scripts/test-version-lib.sh            # contract test for the release version<->tag primitive
    bash scripts/test-release-run.sh            # contract test for the release lane policy (DRY_RUN)
@@ -216,6 +218,17 @@ boundary; the comment was reworded rather than exempted.
 **The milestone primitives live in `forge-lib.sh`, not in the roadmap group.** Milestones are a host
 capability rather than a planning concept, `dep-auditor` already reads them, and a project using any
 other method still wants them.
+
+**A component declares WHERE IT BELONGS, and absent means `user` (#164).** `scope: user` means it
+is correct in every project and is installed once by enabling its plugin group; `scope: project`
+means it must be rewritten for the project it lands in, and it **carries a `scope-reason:`**, the
+same shape `check-restatements.sh` requires of an allowlist entry, because copying a component into
+every project is the cost that field buys. The default is `user` deliberately: a default should
+point at the good path, and after #163 that is the case the tree can prove. All thirty-eight
+components are user-scoped today. `scripts/check-component-scope.sh` reads FRONTMATTER only (a
+`scope:` in the body is an example, and reading it would let a component be scoped by its own
+documentation) and refuses a user-scoped component carrying an install-time placeholder, which is
+the one contradiction a script can see.
 
 **A component resolves its values at RUNTIME, never at install time (#163).** A component that
 reads the project it is running in is correct in every project and can be installed once, by
