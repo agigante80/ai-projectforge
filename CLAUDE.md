@@ -122,7 +122,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 |---|---|---|
 | `forge-kit-adapt` | 0.4.8 | skill: adapt |
 | `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
-| `forge-kit-devops` | 0.10.2 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
+| `forge-kit-devops` | 0.10.3 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
 | `forge-kit-governance` | 0.9.5 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
 | `forge-kit-roadmap` | 0.6.1 | command: phase; skill: roadmap-phases; shell assets: check-phases, roadmap-lib, sync-phases |
