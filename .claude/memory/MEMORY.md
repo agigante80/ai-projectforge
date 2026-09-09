@@ -12,3 +12,6 @@
 - [Shipped assets resolve by search, not by CLAUDE_PLUGIN_ROOT](shipped-asset-path-resolution.md) - An agent's Bash never gets CLAUDE_PLUGIN_ROOT; a missing asset degrades silently, and forge-adapt copies assets only because the write step says so
 - [Work on develop, merge to main, no PRs](develop-branch-workflow.md) - maintainer decision 2026-09-08; the range guards are pull_request-only so pre-push is now the only enforcement (#158)
 - [Component size is what an agent PRELOADS](component-size-is-what-preloads.md) - skills: frontmatter injects full bodies; references/ do not; the metric was wrong until #150
+- [What the claude plugin CLI actually does](claude-plugin-cli-facts.md) - probed 2.1.265: cache keyed by version not sha, dependencies resolve but fail silently, details does not charge preloads, nothing auto-updates
+- [The external numbers for skill size, and how forge-kit compares](external-skill-size-guidance.md) - Anthropic says 500 LINES and references one level deep; superpowers says description under 500 chars and states when-to-use not what-it-does
+- [Research external practice before handing over a judgment call](research-before-presenting-a-judgment-call.md) - maintainer 2026-09-09: do not just cost my own options; check upstream docs and the reference implementation, then give pros, cons and a recommendation

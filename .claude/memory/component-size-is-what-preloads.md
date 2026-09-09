@@ -17,5 +17,12 @@ Consequences that cost real work to learn:
 So: to shrink an agent, move read-once material two hops (agent -> companion skill -> references),
 not one. And never trust a size number that was taken from a single file.
 
-Related: [[verify-against-installed-artifacts]] - this was found by probing the binary, not by
+**Corroborated and contradicted, 2026-09-09.** `claude plugin details` reports token cost per
+component and does NOT charge an agent for its preloaded companions: a companion grown from 210 to
+6k tokens left the declaring agent at under 20. So the CLI disagrees with the finding above and
+cannot be used as a drop-in for this measurement (#170). The finding above was verified against
+2.1.263 by probing the spawn path and has NOT been re-verified against 2.1.265; if it ever stops
+holding, this guard becomes the wrong one and the CLI's number becomes right.
+
+Related: [[claude-plugin-cli-facts]], [[external-skill-size-guidance]], [[verify-against-installed-artifacts]] - this was found by probing the binary, not by
 reading docs, which is the only reason it was found at all.
