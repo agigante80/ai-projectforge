@@ -192,7 +192,7 @@ The root `.claude-plugin/marketplace.json` lists all plugins with their local `s
 - Skills → injected knowledge, patterns, checklists; no isolation
 - Commands → user-facing entry points; delegate to agents
 
-**`{{GITHUB_REPO}}` placeholder:** Appears in agents that call the GitHub API (e.g., `ticket-gate`). Must be replaced with `owner/repo` at install time. `forge-adapt` handles this automatically; manual installs need `sed -i 's/{{GITHUB_REPO}}/owner\/repo/g'`.
+**`{{GITHUB_REPO}}` is retired from every component (#163).** It survives only in prose documenting the manual-install path, where naming it is correct. No component substitutes anything at install time any more: `forge_repo` derives `owner/repo` from the git remote at runtime, which is what lets a component be installed once rather than copied into each project. `scripts/check-live-placeholders.sh` refuses a new one.
 
 **Installation paths:**
 - Plugin marketplace: `/plugin marketplace add agigante80/forge-kit` then `/plugin install forge-kit-adapt@forge-kit`, after which forge-adapt installs everything else. The skill's frontmatter `name` is `forge-adapt`, but its directory is `skills/adapt/`, so the slash form is `/forge-kit-adapt:adapt` (not `/forge-adapt`); in conversation, "run forge-adapt" also triggers it.
