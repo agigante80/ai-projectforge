@@ -129,14 +129,14 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 
 | Plugin group | Version | Contents |
 |---|---|---|
-| `forge-kit-adapt` | 0.6.1 | skill: adapt |
-| `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
-| `forge-kit-devops` | 0.10.6 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
-| `forge-kit-governance` | 0.12.0 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, decision-brief, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
-| `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
-| `forge-kit-roadmap` | 0.8.0 | command: phase; skill: roadmap-phases; shell assets: check-phases, roadmap-lib, sync-phases |
-| `forge-kit-security` | 0.7.3 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
-| `forge-kit-testing` | 0.2.1 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
+| `forge-kit-adapt` | 0.6.2 | skill: adapt |
+| `forge-kit-backend` | 0.1.1 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
+| `forge-kit-devops` | 0.10.7 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
+| `forge-kit-governance` | 0.12.1 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, decision-brief, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
+| `forge-kit-review` | 0.3.4 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
+| `forge-kit-roadmap` | 0.8.1 | command: phase; skill: roadmap-phases; shell assets: check-phases, roadmap-lib, sync-phases |
+| `forge-kit-security` | 0.7.4 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
+| `forge-kit-testing` | 0.2.2 | agents: performance-engineer, tdd-orchestrator, test-automator; skill: mutation-sweep |
 <!-- plugin-groups:end -->
 
 Users install via the plugin marketplace (`/plugin marketplace add agigante80/forge-kit`) or by cloning the repo and running `forge-adapt` from within the target project.
@@ -179,11 +179,14 @@ Note: `dep-auditor` and `health-check` are agent types, not slash commands. Trig
 
 ## Plugin Structure
 
-Each plugin group has a `.claude-plugin/plugin.json` with `name`, `description`, and a semver `version` (the ecosystem-standard plugin version, distinct from the per-component `<name>-version` markers):
+Each plugin group has a `.claude-plugin/plugin.json` with `name`, `description`, a semver `version` (the ecosystem-standard plugin version, distinct from the per-component `<name>-version` markers), and an `author`:
 
 ```json
-{ "name": "forge-kit-<group>", "version": "0.1.0", "description": "..." }
+{ "name": "forge-kit-<group>", "version": "0.1.0", "description": "...",
+  "author": { "name": "agigante80", "url": "https://github.com/agigante80" } }
 ```
+
+**`author` is required by `validate-plugins.sh`, and its value is a deliberate minimum (#173).** Every group was missing it, so the advisory `claude plugin validate` step printed eight warnings on every build and nobody read any of them; the cheapest way to make an advisory check useful is for it to say nothing when nothing is wrong, and the cheapest way to keep it that way is a build failure rather than a ninth warning. The shape is the CLI's own, probed on 2.1.267: an OBJECT with a non-empty `name` plus an optional `url`. A bare string is rejected there, so accepting one here would make the guard laxer than the thing it stands in front of. **The value is the handle and its profile URL, and no email address**: the handle is already public in every clone URL, which is why `check-private-leaks.sh` drops the owning account from its own list, while an email address is what `check-public-leaks.sh` rule C exists to catch and cannot be recalled from a public history. `marketplace.json`'s `owner` block is the one place an address appears, and it is allowlisted there rather than copied into eight more files.
 
 The root `.claude-plugin/marketplace.json` lists all plugins with their local `source` paths. This is the file the plugin marketplace reads to discover installable plugins.
 
