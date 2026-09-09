@@ -127,7 +127,7 @@ Version column is the group's `plugin.json` semver (the unit of install), not a 
 | `forge-kit-adapt` | 0.4.8 | skill: adapt |
 | `forge-kit-backend` | 0.1.0 | skills: api-design-principles, architecture-patterns, cqrs-implementation, microservices-patterns, saga-orchestration |
 | `forge-kit-devops` | 0.10.4 | agents: dep-auditor, health-check; command: ci-health; skills: find-dead-code, forge-host, github-to-forgejo, release, release-automation; hook: block-legacy-host-push; shell assets: forge-lib, release-run, sync-labels, version-lib |
-| `forge-kit-governance` | 0.9.6 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
+| `forge-kit-governance` | 0.9.7 | agent: ticket-gate; command: gate-ticket; skills: closing-sessions, ticket-gate-reference, working-overnight; hooks: block-dashes, overnight-continue, overnight-guard; shell asset: check-ticket-mechanics |
 | `forge-kit-review` | 0.3.3 | agents: architect-review, backend-architect, code-reviewer, code-simplifier, coding-standards-auditor; commands: full-review, pr-enhance |
 | `forge-kit-roadmap` | 0.6.1 | command: phase; skill: roadmap-phases; shell assets: check-phases, roadmap-lib, sync-phases |
 | `forge-kit-security` | 0.7.1 | agents: api-security-tester, backend-security-coder, security-auditor; skills: leak-guard, owasp-api-security, privacy-regime; shell assets: check-private-leaks, check-public-leaks |
@@ -268,6 +268,25 @@ Three of the four consumers share one **byte-identical** ERE: `scripts/validate-
 The governance `hooks.json` wires three hooks in three different shapes, and the differences are deliberate. `block-dashes` is a `PreToolUse` hook shell-gated on a dedicated opt-in file, `.claude/no-dashes`. `overnight-guard` is also `PreToolUse` and shell-gated, but on `.claude/overnight/active.md`, the armed run's own manifest rather than a separate sentinel, so arming a run is the opt-in and no second file can fall out of sync with it; it also matches `Bash` alone, where `block-dashes` matches the full five-tool write set, because it polices commands rather than prose. `overnight-continue` is the exception to "gate in the shell, not the interpreter": it is a **Stop** hook wired straight to `python3` with no `sh` wrapper, gating internally on the same manifest. A Stop hook fires once per session end rather than once per matched tool call, so the 44 ms interpreter start is paid a handful of times a day instead of thousands, and the wrapper is not worth its own failure mode there. Do not "unify" these three onto one shape. `plugins/forge-kit-governance/hooks/README.md` carries the long form of the install model (sentinel, shell gate, measured costs), though it predates the overnight hooks and documents only the `block-dashes` shape; read it before changing how a hook reaches a project.
 
 Two facts that are easy to conflate and must not be. **Where the component library lives** (`~/.claude/plugins/marketplaces/forge-kit`, or a `~/forge-kit` clone) says nothing about **which plugin groups are enabled**. The plugin *cache* (`~/.claude/plugins/cache/<marketplace>/<plugin>/<sha>/`) contains only an installed plugin's own files and never a `plugins/` tree, so it can never serve as the library. `forge-kit-governance` must be installed explicitly (`/plugin install forge-kit-governance@forge-kit`) for its `hooks.json` to load; the quick-start installs `forge-kit-adapt` alone. Prefer plugin registration where it applies, because it owns no user config and so has no wiring to drift, duplicate, or clobber, and that copy-and-mutate path was the origin of every hook bug in this repo's history.
+
+**User level without forcing it on every project: the opt-in sentinel (#165).** A component
+installed at user level is available everywhere, which is right for knowledge and wrong for
+behaviour a project has not asked for. The answer is NOT a per-project copy, which is the
+copy-and-mutate path this file already blames for every hook bug in the repo's history. It is a gate
+the project owns. Two shapes, and the choice is not arbitrary:
+
+- **Gate on the feature's own manifest** wherever the feature has one. `overnight-guard` gates on
+  `.claude/overnight/active.md`, so arming a run IS the opt-in and no second file can fall out of
+  sync with the first. Prefer this.
+- **Gate on a dedicated sentinel** only where the feature has no natural manifest. `block-dashes`
+  gates on `.claude/no-dashes`. It is one more file to create and one more thing that can disagree
+  with reality, which is the whole cost of the shape.
+
+A HOOK gates in the shell; the cost is measured below. A SKILL or COMMAND has no wrapper, so it can
+only gate in its own prose: the first instruction reads the sentinel and stops when it is absent.
+That is genuinely weaker, because a model can be argued out of an instruction where a shell cannot,
+so use it only for components that ACT. **A knowledge skill is inert until invoked and needs no gate
+at all**; adding one would be ceremony.
 
 **A plugin hook is live in every project, so gate it in the shell, not in the interpreter.** `hooks.json` runs `sh -c`, which tests for the sentinel and exits before `exec python3` unless the project opted in: 1.8 ms per matched tool call in a project that has not, against 44 ms if Python starts first, because the interpreter pays for `site` and its stdlib imports before it can read its own gate. The gate inside `block-dashes.py` stays as defence in depth, and is the only gate for the project-local install shape, which has no wrapper. The wrapper requires `sh` on `PATH` (Git Bash on Windows); where that is unavailable, install project-locally.
 
