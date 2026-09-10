@@ -23,7 +23,7 @@ cross-agent instruction format); keep it a pointer, never duplicate content into
 1. **Structural / discipline checks** (the same gates CI runs; run these before committing):
 
    ```bash
-   bash scripts/validate-plugins.sh            # plugin.json + marketplace.json + version markers + declared dependencies (whole tree)
+   bash scripts/validate-plugins.sh            # plugin.json + marketplace + markers + dependencies + dispatch targets (whole tree)
    bash scripts/test-validate-plugins.sh       # contract test for the structural gate above
    bash scripts/check-template-lockstep.sh     # fail if the work templates + canonical ticket-standards doc drift out of version lockstep
    python3 scripts/test-hooks.py               # behavioural contract tests for the hooks
@@ -169,6 +169,8 @@ Key agents:
 - Specialist agents: `security-auditor`, `architect-review`, `code-reviewer`, `api-security-tester`. **#178 retired five more** (`backend-architect`, `backend-security-coder`, `tdd-orchestrator`, `test-automator`, `performance-engineer`) plus the whole `forge-kit-backend` group, because each was the same file wshobson/agents ships; `scripts/check-neighbour-overlap.sh` now stops that recurring.
 
 Note: the 5-phase `full-review` orchestrator is a **command** (`/full-review`), not an agent (see Commands below). There is no `full-review` agent type.
+
+**Agent names carry no plugin prefix, and that was decided rather than defaulted (#180).** Every neighbouring plugin prefixes its agents (`backend-development-security-auditor`, `tdd-workflows-tdd-orchestrator`); forge-kit's are bare (`security-auditor`). The rename was declined because **Claude Code already namespaces subagent types by plugin**: this repo's own agent is dispatched as `forge-kit-governance:ticket-gate`, so nothing collides and the prefix would buy provenance in a listing most users never see, at the cost of touching every agent file, every marker and every group semver. What did ship is the guard for the failure that ticket identified, because #178 made it live: `validate-plugins.sh` check 5 fails a build where a component dispatches a `subagent_type` no agent in the tree provides, which would otherwise fail at RUNTIME and silently, the same class as #124. `general-purpose` is exempt: it is Claude Code's own built-in.
 
 **Commands** (`plugins/<group>/commands/*.md`): thin slash-command wrappers that delegate to agents. The command name comes from the filename (`full-review.md` → `/full-review`), so YAML frontmatter is optional and inconsistent across the kit: `gate-ticket` and `ci-health` have no frontmatter at all (markdown body only); `full-review` uses `description` + `argument-hint`. Don't assume a `name:` field exists. Users invoke these directly:
 - `/gate-ticket <N>`: run the ticket readiness gate on GitHub issue N.
